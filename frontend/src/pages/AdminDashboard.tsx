@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProductionSummary, getWorkers } from '../api';
-import type { User, ProductionSummary } from '../types';
+import { getProductionSummary, getProductionEntries, getWorkers } from '../api';
+import type { User, ProductionSummary, ProductionEntry } from '../types';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const [summary, setSummary] = useState<ProductionSummary[]>([]);
+  const [entries, setEntries] = useState<ProductionEntry[]>([]);
   const [workers, setWorkers] = useState<User[]>([]);
   const [selectedWorker, setSelectedWorker] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -23,17 +24,24 @@ export default function AdminDashboard() {
 
   async function loadData() {
     setLoading(true);
-    const data = await getProductionSummary({
+    const filters = {
       workerId: selectedWorker || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
-    });
-    setSummary(data);
+    };
+    const [summaryData, entriesData] = await Promise.all([
+      getProductionSummary(filters),
+      getProductionEntries(filters)
+    ]);
+    setSummary(summaryData);
+    setEntries(entriesData);
     setLoading(false);
   }
 
   const totalQuantity = summary.reduce((acc, s) => acc + s.total_quantity, 0);
   const totalEntries = summary.reduce((acc, s) => acc + s.entry_count, 0);
+  // Calculate total cost from entries (cost * quantity for each entry)
+  const totalCost = entries.reduce((acc, e) => acc + (e.production_cost * e.quantity), 0);
 
   return (
     <div className="admin-container">
@@ -82,6 +90,10 @@ export default function AdminDashboard() {
             <span className="stat-label">Całkowita ilość</span>
           </div>
           <div className="stat-card">
+            <span className="stat-value">{totalCost.toFixed(2)} zł</span>
+            <span className="stat-label">Całkowity koszt</span>
+          </div>
+          <div className="stat-card">
             <span className="stat-value">{totalEntries}</span>
             <span className="stat-label">Razem wpisów</span>
           </div>
@@ -104,18 +116,26 @@ export default function AdminDashboard() {
                   <th>Pracownik</th>
                   <th>Rodzaj</th>
                   <th>Ilość</th>
+                  <th>Koszt</th>
                   <th>Wpisów</th>
                 </tr>
               </thead>
               <tbody>
-                {summary.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.worker_name}</td>
-                    <td>{s.product_type}</td>
-                    <td className="num">{s.total_quantity}</td>
-                    <td className="num">{s.entry_count}</td>
-                  </tr>
-                ))}
+                {summary.map((s, i) => {
+                  // Calculate cost for this worker/product_type from entries
+                  const rowCost = entries
+                    .filter(e => e.worker_id === s.worker_id && e.product_type === s.product_type)
+                    .reduce((acc, e) => acc + (e.production_cost * e.quantity), 0);
+                  return (
+                    <tr key={i}>
+                      <td>{s.worker_name}</td>
+                      <td>{s.product_type}</td>
+                      <td className="num">{s.total_quantity}</td>
+                      <td className="num">{rowCost.toFixed(2)} zł</td>
+                      <td className="num">{s.entry_count}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
