@@ -25,7 +25,7 @@ export default function Login() {
                 navigate('/worker');
             }
         } catch {
-            setError('User not found. Please check your code.');
+            setError('Nie znaleziono użytkownika. Sprawdź kod.');
         } finally {
             setLoading(false);
         }
@@ -34,18 +34,18 @@ export default function Login() {
     return (
         <div className="login-container">
             <div className="login-card">
-                <h1>Production Tracker</h1>
-                <p className="login-subtitle">Enter your worker code to continue</p>
+                <h1>Śledzenie Produkcji</h1>
+                <p className="login-subtitle">Wprowadź swój kod pracownika, aby kontynuować</p>
 
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label htmlFor="userCode">User Code</label>
+                        <label htmlFor="userCode">Kod użytkownika</label>
                         <input
                             type="text"
                             id="userCode"
                             value={userCode}
                             onChange={(e) => setUserCode(e.target.value)}
-                            placeholder="e.g., WRK001 or ADMIN001"
+                            placeholder="np. WRK001 lub ADMIN001"
                             required
                         />
                     </div>
@@ -53,15 +53,15 @@ export default function Login() {
                     {error && <div className="error-message">{error}</div>}
 
                     <button type="submit" disabled={loading} className="btn-primary">
-                        {loading ? 'Logging in...' : 'Login'}
+                        {loading ? 'Logowanie...' : 'Zaloguj się'}
                     </button>
                 </form>
 
                 <div className="login-help">
-                    <p>Demo accounts:</p>
+                    <p>Konta demo:</p>
                     <ul>
-                        <li><code>ADMIN001</code> - Admin dashboard</li>
-                        <li><code>WRK001</code> - <code>WRK005</code> - Worker view</li>
+                        <li><code>ADMIN001</code> - Panel administratora</li>
+                        <li><code>WRK001</code> - <code>WRK005</code> - Widok pracownika</li>
                     </ul>
                 </div>
             </div>

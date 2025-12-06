@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # User schemas
@@ -23,8 +23,16 @@ class LoginRequest(BaseModel):
 # Production entry schemas
 class ProductionEntryCreate(BaseModel):
     product_type: str
-    product_size: str
-    quantity: int
+    width_cm: int = Field(..., ge=10, le=2000)
+    height_cm: int = Field(..., ge=10, le=2000)
+    quantity: int = Field(..., ge=1)
+
+
+class ProductionEntryUpdate(BaseModel):
+    product_type: str | None = None
+    width_cm: int | None = Field(None, ge=10, le=2000)
+    height_cm: int | None = Field(None, ge=10, le=2000)
+    quantity: int | None = Field(None, ge=1)
 
 
 class ProductionEntryResponse(BaseModel):
@@ -32,8 +40,10 @@ class ProductionEntryResponse(BaseModel):
     worker_id: int
     worker_name: str
     product_type: str
-    product_size: str
+    width_cm: int
+    height_cm: int
     quantity: int
+    production_cost: float
     created_at: datetime
     
     class Config:
@@ -44,6 +54,6 @@ class ProductionSummary(BaseModel):
     worker_id: int
     worker_name: str
     product_type: str
-    product_size: str
     total_quantity: int
+    total_cost: float
     entry_count: int

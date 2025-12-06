@@ -33,41 +33,42 @@ export default function AdminDashboard() {
   }
 
   const totalQuantity = summary.reduce((acc, s) => acc + s.total_quantity, 0);
-  const totalEntries = summary.reduce((acc, s) => acc + s.entry_count, 0);
+  const totalCost = summary.reduce((acc, s) => acc + s.total_cost, 0);
 
   return (
     <div className="admin-container">
       <header className="header">
-        <h1>Admin Dashboard</h1>
+        <h1>Panel Administratora</h1>
         <nav className="nav">
-          <Link to="/admin" className="nav-link active">Dashboard</Link>
-          <Link to="/admin/history" className="nav-link">History</Link>
+          <Link to="/admin" className="nav-link active">Podsumowanie</Link>
+          <Link to="/admin/history" className="nav-link">Historia</Link>
+          <Link to="/admin/add" className="nav-link">Dodaj wpis</Link>
         </nav>
         <div className="user-info">
           <span>{user?.name}</span>
-          <button onClick={logout} className="btn-secondary">Logout</button>
+          <button onClick={logout} className="btn-secondary">Wyloguj</button>
         </div>
       </header>
 
       <main className="admin-main">
         <div className="filters-card">
-          <h3>Filters</h3>
+          <h3>Filtry</h3>
           <div className="filters-row">
             <div className="form-group">
-              <label>Worker</label>
+              <label>Pracownik</label>
               <select value={selectedWorker} onChange={(e) => setSelectedWorker(e.target.value)}>
-                <option value="">All Workers</option>
+                <option value="">Wszyscy pracownicy</option>
                 {workers.map(w => (
                   <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
               </select>
             </div>
             <div className="form-group">
-              <label>From</label>
+              <label>Od</label>
               <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
             <div className="form-group">
-              <label>To</label>
+              <label>Do</label>
               <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
           </div>
@@ -76,33 +77,33 @@ export default function AdminDashboard() {
         <div className="stats-row">
           <div className="stat-card">
             <span className="stat-value">{totalQuantity}</span>
-            <span className="stat-label">Total Items Produced</span>
+            <span className="stat-label">Całkowita ilość</span>
           </div>
           <div className="stat-card">
-            <span className="stat-value">{totalEntries}</span>
-            <span className="stat-label">Total Entries</span>
+            <span className="stat-value">{totalCost.toFixed(2)} zł</span>
+            <span className="stat-label">Całkowity koszt</span>
           </div>
           <div className="stat-card">
             <span className="stat-value">{workers.length}</span>
-            <span className="stat-label">Active Workers</span>
+            <span className="stat-label">Aktywni pracownicy</span>
           </div>
         </div>
 
         <div className="summary-card">
-          <h3>Production Summary</h3>
+          <h3>Podsumowanie produkcji</h3>
           {loading ? (
-            <p className="loading">Loading...</p>
+            <p className="loading">Ładowanie...</p>
           ) : summary.length === 0 ? (
-            <p className="empty">No production data found</p>
+            <p className="empty">Brak danych produkcji</p>
           ) : (
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Worker</th>
-                  <th>Product Type</th>
-                  <th>Size</th>
-                  <th>Total Qty</th>
-                  <th>Entries</th>
+                  <th>Pracownik</th>
+                  <th>Rodzaj</th>
+                  <th>Ilość</th>
+                  <th>Koszt całkowity</th>
+                  <th>Wpisów</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,8 +111,8 @@ export default function AdminDashboard() {
                   <tr key={i}>
                     <td>{s.worker_name}</td>
                     <td>{s.product_type}</td>
-                    <td>{s.product_size}</td>
                     <td className="num">{s.total_quantity}</td>
+                    <td className="num">{s.total_cost.toFixed(2)} zł</td>
                     <td className="num">{s.entry_count}</td>
                   </tr>
                 ))}

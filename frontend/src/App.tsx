@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import WorkerView from './pages/WorkerView';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminHistory from './pages/AdminHistory';
+import AdminAddEntry from './pages/AdminAddEntry';
 import type { ReactNode } from 'react';
 
 interface ProtectedRouteProps {
@@ -46,6 +47,11 @@ function AppRoutes() {
       <Route path="/admin/history" element={
         <ProtectedRoute requiredRole="admin">
           <AdminHistory />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/add" element={
+        <ProtectedRoute requiredRole="admin">
+          <AdminAddEntry />
         </ProtectedRoute>
       } />
     </Routes>
