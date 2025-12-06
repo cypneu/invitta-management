@@ -189,33 +189,35 @@ export default function WorkerView() {
                 {entries.length > 0 && (
                     <div className="entries-card">
                         <h3>Twoje wpisy</h3>
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Data</th>
-                                    <th>Rodzaj</th>
-                                    <th>Wymiary</th>
-                                    <th>Ilość</th>
-                                    <th>Koszt/szt.</th>
-                                    <th>Akcje</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {entries.map(entry => (
-                                    <tr key={entry.id}>
-                                        <td>{new Date(entry.created_at).toLocaleDateString('pl-PL')}</td>
-                                        <td>{entry.product_type}</td>
-                                        <td>{entry.width_cm}×{entry.height_cm} cm</td>
-                                        <td className="num">{entry.quantity}</td>
-                                        <td className="num">{entry.production_cost.toFixed(2)} zł</td>
-                                        <td className="actions">
-                                            <button onClick={() => handleEdit(entry)} className="btn-icon" title="Edytuj">✏️</button>
-                                            <button onClick={() => handleDelete(entry.id)} className="btn-icon btn-danger" title="Usuń">🗑️</button>
-                                        </td>
+                        <div className="table-wrapper">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Rodzaj</th>
+                                        <th>Wymiary</th>
+                                        <th>Ilość</th>
+                                        <th>Koszt/szt.</th>
+                                        <th>Akcje</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {entries.map(entry => (
+                                        <tr key={entry.id}>
+                                            <td>{new Date(entry.created_at).toLocaleDateString('pl-PL')}</td>
+                                            <td>{entry.product_type}</td>
+                                            <td>{entry.width_cm}×{entry.height_cm} cm</td>
+                                            <td className="num">{entry.quantity}</td>
+                                            <td className="num">{entry.production_cost.toFixed(2)} zł</td>
+                                            <td className="actions">
+                                                <button onClick={() => handleEdit(entry)} className="btn-icon" title="Edytuj">✏️</button>
+                                                <button onClick={() => handleDelete(entry.id)} className="btn-icon btn-danger" title="Usuń">🗑️</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </main>

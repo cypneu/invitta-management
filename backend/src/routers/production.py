@@ -5,11 +5,41 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from ..database import get_db
-from ..models import User, ProductionEntry
+from ..models import User, ProductionEntry, CostConfig
 from ..schemas import ProductionEntryCreate, ProductionEntryUpdate, ProductionEntryResponse, ProductionSummary
-from ..cost_calculator import calculate_price_brutto, get_tablecloth_finish_values
+from ..cost_calculator import calculate_production_cost, get_tablecloth_finish_values, DEFAULT_CORNER_SEWING_FACTOR, DEFAULT_SEWING_FACTOR
 
 router = APIRouter(prefix="/api/production", tags=["production"])
+
+
+def get_cost_factors(db: Session) -> tuple[dict, dict]:
+    """Get cost factors from DB or use defaults."""
+    config = db.query(CostConfig).first()
+    if config:
+        return config.corner_sewing_factors, config.sewing_factors
+    return DEFAULT_CORNER_SEWING_FACTOR, DEFAULT_SEWING_FACTOR
+
+
+def entry_to_response(entry: ProductionEntry, worker_name: str, corner_factors: dict, sewing_factors: dict) -> ProductionEntryResponse:
+    """Convert entry to response with computed cost."""
+    cost = calculate_production_cost(
+        entry.product_type,
+        entry.width_cm,
+        entry.height_cm,
+        corner_factors,
+        sewing_factors
+    )
+    return ProductionEntryResponse(
+        id=entry.id,
+        worker_id=entry.worker_id,
+        worker_name=worker_name,
+        product_type=entry.product_type,
+        width_cm=entry.width_cm,
+        height_cm=entry.height_cm,
+        quantity=entry.quantity,
+        production_cost=cost,
+        created_at=entry.created_at
+    )
 
 
 @router.post("/", response_model=ProductionEntryResponse)
@@ -23,32 +53,19 @@ def create_entry(
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
     
-    # Calculate production cost
-    production_cost = calculate_price_brutto(entry.product_type, entry.width_cm, entry.height_cm)
-    
     db_entry = ProductionEntry(
         worker_id=worker_id,
         product_type=entry.product_type,
         width_cm=entry.width_cm,
         height_cm=entry.height_cm,
-        quantity=entry.quantity,
-        production_cost=production_cost
+        quantity=entry.quantity
     )
     db.add(db_entry)
     db.commit()
     db.refresh(db_entry)
     
-    return ProductionEntryResponse(
-        id=db_entry.id,
-        worker_id=db_entry.worker_id,
-        worker_name=worker.name,
-        product_type=db_entry.product_type,
-        width_cm=db_entry.width_cm,
-        height_cm=db_entry.height_cm,
-        quantity=db_entry.quantity,
-        production_cost=db_entry.production_cost,
-        created_at=db_entry.created_at
-    )
+    corner_factors, sewing_factors = get_cost_factors(db)
+    return entry_to_response(db_entry, worker.name, corner_factors, sewing_factors)
 
 
 @router.put("/{entry_id}", response_model=ProductionEntryResponse)
@@ -81,27 +98,12 @@ def update_entry(
     if entry.quantity is not None:
         db_entry.quantity = entry.quantity
     
-    # Recalculate production cost
-    db_entry.production_cost = calculate_price_brutto(
-        db_entry.product_type, db_entry.width_cm, db_entry.height_cm
-    )
-    
     db.commit()
     db.refresh(db_entry)
     
     worker = db.query(User).filter(User.id == db_entry.worker_id).first()
-    
-    return ProductionEntryResponse(
-        id=db_entry.id,
-        worker_id=db_entry.worker_id,
-        worker_name=worker.name,
-        product_type=db_entry.product_type,
-        width_cm=db_entry.width_cm,
-        height_cm=db_entry.height_cm,
-        quantity=db_entry.quantity,
-        production_cost=db_entry.production_cost,
-        created_at=db_entry.created_at
-    )
+    corner_factors, sewing_factors = get_cost_factors(db)
+    return entry_to_response(db_entry, worker.name, corner_factors, sewing_factors)
 
 
 @router.delete("/{entry_id}")
@@ -150,19 +152,10 @@ def list_entries(
         query = query.filter(func.date(ProductionEntry.created_at) <= date_to)
     
     entries = query.order_by(ProductionEntry.created_at.desc()).all()
+    corner_factors, sewing_factors = get_cost_factors(db)
     
     return [
-        ProductionEntryResponse(
-            id=e.id,
-            worker_id=e.worker_id,
-            worker_name=e.worker.name,
-            product_type=e.product_type,
-            width_cm=e.width_cm,
-            height_cm=e.height_cm,
-            quantity=e.quantity,
-            production_cost=e.production_cost,
-            created_at=e.created_at
-        )
+        entry_to_response(e, e.worker.name, corner_factors, sewing_factors)
         for e in entries
     ]
 
@@ -175,12 +168,14 @@ def get_summary(
     db: Session = Depends(get_db)
 ):
     """Get aggregated production summary by worker and type"""
+    # Concatenate first_name + last_name for worker name
+    worker_name_expr = (User.first_name + ' ' + User.last_name).label("worker_name")
+    
     query = db.query(
         ProductionEntry.worker_id,
-        User.name.label("worker_name"),
+        worker_name_expr,
         ProductionEntry.product_type,
         func.sum(ProductionEntry.quantity).label("total_quantity"),
-        func.sum(ProductionEntry.production_cost * ProductionEntry.quantity).label("total_cost"),
         func.count(ProductionEntry.id).label("entry_count")
     ).join(User)
     
@@ -193,7 +188,8 @@ def get_summary(
     
     results = query.group_by(
         ProductionEntry.worker_id,
-        User.name,
+        User.first_name,
+        User.last_name,
         ProductionEntry.product_type
     ).all()
     
@@ -203,7 +199,6 @@ def get_summary(
             worker_name=r.worker_name,
             product_type=r.product_type,
             total_quantity=r.total_quantity,
-            total_cost=round(r.total_cost, 2),
             entry_count=r.entry_count
         )
         for r in results

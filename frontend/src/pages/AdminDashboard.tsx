@@ -33,7 +33,7 @@ export default function AdminDashboard() {
   }
 
   const totalQuantity = summary.reduce((acc, s) => acc + s.total_quantity, 0);
-  const totalCost = summary.reduce((acc, s) => acc + s.total_cost, 0);
+  const totalEntries = summary.reduce((acc, s) => acc + s.entry_count, 0);
 
   return (
     <div className="admin-container">
@@ -43,6 +43,8 @@ export default function AdminDashboard() {
           <Link to="/admin" className="nav-link active">Podsumowanie</Link>
           <Link to="/admin/history" className="nav-link">Historia</Link>
           <Link to="/admin/add" className="nav-link">Dodaj wpis</Link>
+          <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
+          <Link to="/admin/settings" className="nav-link">Ustawienia</Link>
         </nav>
         <div className="user-info">
           <span>{user?.name}</span>
@@ -80,8 +82,8 @@ export default function AdminDashboard() {
             <span className="stat-label">Całkowita ilość</span>
           </div>
           <div className="stat-card">
-            <span className="stat-value">{totalCost.toFixed(2)} zł</span>
-            <span className="stat-label">Całkowity koszt</span>
+            <span className="stat-value">{totalEntries}</span>
+            <span className="stat-label">Razem wpisów</span>
           </div>
           <div className="stat-card">
             <span className="stat-value">{workers.length}</span>
@@ -102,7 +104,6 @@ export default function AdminDashboard() {
                   <th>Pracownik</th>
                   <th>Rodzaj</th>
                   <th>Ilość</th>
-                  <th>Koszt całkowity</th>
                   <th>Wpisów</th>
                 </tr>
               </thead>
@@ -112,7 +113,6 @@ export default function AdminDashboard() {
                     <td>{s.worker_name}</td>
                     <td>{s.product_type}</td>
                     <td className="num">{s.total_quantity}</td>
-                    <td className="num">{s.total_cost.toFixed(2)} zł</td>
                     <td className="num">{s.entry_count}</td>
                   </tr>
                 ))}

@@ -5,6 +5,8 @@ import WorkerView from './pages/WorkerView';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminHistory from './pages/AdminHistory';
 import AdminAddEntry from './pages/AdminAddEntry';
+import AdminSettings from './pages/AdminSettings';
+import AdminWorkers from './pages/AdminWorkers';
 import type { ReactNode } from 'react';
 
 interface ProtectedRouteProps {
@@ -52,6 +54,16 @@ function AppRoutes() {
       <Route path="/admin/add" element={
         <ProtectedRoute requiredRole="admin">
           <AdminAddEntry />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/settings" element={
+        <ProtectedRoute requiredRole="admin">
+          <AdminSettings />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/workers" element={
+        <ProtectedRoute requiredRole="admin">
+          <AdminWorkers />
         </ProtectedRoute>
       } />
     </Routes>

@@ -70,6 +70,8 @@ export default function AdminAddEntry() {
                     <Link to="/admin" className="nav-link">Podsumowanie</Link>
                     <Link to="/admin/history" className="nav-link">Historia</Link>
                     <Link to="/admin/add" className="nav-link active">Dodaj wpis</Link>
+                    <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
+                    <Link to="/admin/settings" className="nav-link">Ustawienia</Link>
                 </nav>
                 <div className="user-info">
                     <span>{user?.name}</span>

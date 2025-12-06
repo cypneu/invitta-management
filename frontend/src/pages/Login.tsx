@@ -16,7 +16,7 @@ export default function Login() {
         setLoading(true);
 
         try {
-            const user = await apiLogin(userCode.toUpperCase());
+            const user = await apiLogin(userCode);
             login(user);
 
             if (user.role === 'admin') {
@@ -35,7 +35,7 @@ export default function Login() {
         <div className="login-container">
             <div className="login-card">
                 <h1>Śledzenie Produkcji</h1>
-                <p className="login-subtitle">Wprowadź swój kod pracownika, aby kontynuować</p>
+                <p className="login-subtitle">Wprowadź swój kod, aby kontynuować</p>
 
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
@@ -45,7 +45,7 @@ export default function Login() {
                             id="userCode"
                             value={userCode}
                             onChange={(e) => setUserCode(e.target.value)}
-                            placeholder="np. WRK001 lub ADMIN001"
+                            placeholder="Wpisz kod logowania"
                             required
                         />
                     </div>
@@ -58,11 +58,7 @@ export default function Login() {
                 </form>
 
                 <div className="login-help">
-                    <p>Konta demo:</p>
-                    <ul>
-                        <li><code>ADMIN001</code> - Panel administratora</li>
-                        <li><code>WRK001</code> - <code>WRK005</code> - Widok pracownika</li>
-                    </ul>
+                    <p>Kody pracowników możesz sprawdzić u administratora.</p>
                 </div>
             </div>
         </div>

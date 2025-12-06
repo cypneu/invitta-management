@@ -2,9 +2,23 @@
 
 export interface User {
     id: number;
+    first_name: string;
+    last_name: string;
     name: string;
     user_code: string;
     role: 'admin' | 'worker';
+}
+
+export interface UserCreate {
+    first_name: string;
+    last_name: string;
+    user_code: string;
+}
+
+export interface UserUpdate {
+    first_name?: string;
+    last_name?: string;
+    user_code?: string;
 }
 
 export interface ProductionEntry {
@@ -24,7 +38,6 @@ export interface ProductionSummary {
     worker_name: string;
     product_type: string;
     total_quantity: number;
-    total_cost: number;
     entry_count: number;
 }
 

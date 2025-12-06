@@ -96,6 +96,8 @@ export default function AdminHistory() {
                     <Link to="/admin" className="nav-link">Podsumowanie</Link>
                     <Link to="/admin/history" className="nav-link active">Historia</Link>
                     <Link to="/admin/add" className="nav-link">Dodaj wpis</Link>
+                    <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
+                    <Link to="/admin/settings" className="nav-link">Ustawienia</Link>
                 </nav>
                 <div className="user-info">
                     <span>{user?.name}</span>

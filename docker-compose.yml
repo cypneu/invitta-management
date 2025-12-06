@@ -21,6 +21,7 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/production_tracker
+      ADMIN_CODE: ${ADMIN_CODE:-}  # Set in .env file or generate random
     ports:
       - "8000:8000"
     volumes:

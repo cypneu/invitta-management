@@ -1,4 +1,4 @@
-import type { User, ProductionEntry, ProductionEntryCreate, ProductionEntryUpdate, ProductionFilters, ProductionSummary } from './types';
+import type { User, UserCreate, UserUpdate, ProductionEntry, ProductionEntryCreate, ProductionEntryUpdate, ProductionFilters, ProductionSummary } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -9,7 +9,7 @@ export async function login(userCode: string): Promise<User> {
         body: JSON.stringify({ user_code: userCode }),
     });
     if (!response.ok) {
-        throw new Error('User not found');
+        throw new Error('Nie znaleziono użytkownika');
     }
     return response.json();
 }
@@ -22,6 +22,42 @@ export async function getWorkers(): Promise<User[]> {
 export async function getAllUsers(): Promise<User[]> {
     const response = await fetch(`${API_BASE}/api/users/`);
     return response.json();
+}
+
+export async function createWorker(worker: UserCreate): Promise<User> {
+    const response = await fetch(`${API_BASE}/api/users/workers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(worker),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Nie udało się utworzyć pracownika');
+    }
+    return response.json();
+}
+
+export async function updateWorker(workerId: number, worker: UserUpdate): Promise<User> {
+    const response = await fetch(`${API_BASE}/api/users/workers/${workerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(worker),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Nie udało się zaktualizować pracownika');
+    }
+    return response.json();
+}
+
+export async function deleteWorker(workerId: number): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/users/workers/${workerId}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Nie udało się usunąć pracownika');
+    }
 }
 
 export async function createProductionEntry(workerId: number, entry: ProductionEntryCreate): Promise<ProductionEntry> {
@@ -86,5 +122,30 @@ export async function getProductionSummary(filters: ProductionFilters = {}): Pro
 
 export async function getProductTypes(): Promise<string[]> {
     const response = await fetch(`${API_BASE}/api/production/product-types`);
+    return response.json();
+}
+
+// Cost config API
+export interface CostConfig {
+    id: number;
+    corner_sewing_factors: Record<string, number>;
+    sewing_factors: Record<string, number>;
+    updated_at: string;
+}
+
+export async function getCostConfig(): Promise<CostConfig> {
+    const response = await fetch(`${API_BASE}/api/config/cost`);
+    return response.json();
+}
+
+export async function updateCostConfig(config: { corner_sewing_factors: Record<string, number>; sewing_factors: Record<string, number> }): Promise<CostConfig> {
+    const response = await fetch(`${API_BASE}/api/config/cost`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    });
+    if (!response.ok) {
+        throw new Error('Nie udało się zapisać konfiguracji');
+    }
     return response.json();
 }

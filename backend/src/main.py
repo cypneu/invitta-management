@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import users, production
+from .routers import users, production, config
 
 app = FastAPI(
     title="Production Tracker API",
@@ -21,6 +21,7 @@ app.add_middleware(
 # Include routers
 app.include_router(users.router)
 app.include_router(production.router)
+app.include_router(config.router)
 
 
 @app.get("/health")

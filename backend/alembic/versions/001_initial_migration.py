@@ -46,15 +46,10 @@ def upgrade() -> None:
     )
     op.create_index('ix_production_entries_id', 'production_entries', ['id'], unique=False)
     
-    # Seed data
+    # Seed data - only admin, workers added via panel
     op.execute("""
         INSERT INTO users (name, user_code, role) VALUES
-        ('Admin CEO', 'ADMIN001', 'admin'),
-        ('Worker One', 'WRK001', 'worker'),
-        ('Worker Two', 'WRK002', 'worker'),
-        ('Worker Three', 'WRK003', 'worker'),
-        ('Worker Four', 'WRK004', 'worker'),
-        ('Worker Five', 'WRK005', 'worker')
+        ('Admin CEO', 'ADMIN001', 'admin')
     """)
 
 
