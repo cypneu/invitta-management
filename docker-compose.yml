@@ -1,31 +1,31 @@
-# Development Docker Compose - with live reload
+# Development Docker Compose - with MySQL (matching Hostido)
 
 services:
   db:
-    image: postgres:18-alpine
+    image: mysql:8.0
     environment:
-      POSTGRES_DB: production_tracker
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      MYSQL_DATABASE: production_tracker
+      MYSQL_USER: produser
+      MYSQL_PASSWORD: prodpass
+      MYSQL_ROOT_PASSWORD: rootpass
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     ports:
-      - "5432:5432"
+      - "3306:3306"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/production_tracker
-      ADMIN_CODE: ${ADMIN_CODE:-}  # Set in .env file or generate random
+      DATABASE_URL: mysql+pymysql://produser:prodpass@db:3306/production_tracker
+      ADMIN_CODE: ${ADMIN_CODE:-TestAdmin123}
     ports:
       - "8000:8000"
     volumes:
-      # Mount only specific source directories, not the whole backend
       - ./backend/src:/app/src:ro
       - ./backend/alembic:/app/alembic:ro
       - ./backend/alembic.ini:/app/alembic.ini:ro
@@ -38,7 +38,6 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      # Mount source code for HMR
       - ./frontend/src:/app/src:ro
       - ./frontend/index.html:/app/index.html:ro
     environment:
@@ -47,4 +46,4 @@ services:
       - backend
 
 volumes:
-  postgres_data:
+  mysql_data:
