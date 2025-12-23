@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { login as apiLogin } from '../api';
 
 export default function Login() {
-  const [userCode, setUserCode] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -16,7 +16,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const user = await apiLogin(userCode);
+      const user = await apiLogin(code);
       login(user);
 
       if (user.role === 'admin') {
@@ -39,12 +39,12 @@ export default function Login() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="userCode">Kod użytkownika</label>
+            <label htmlFor="code">Kod użytkownika</label>
             <input
               type="text"
-              id="userCode"
-              value={userCode}
-              onChange={(e) => setUserCode(e.target.value)}
+              id="code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
               placeholder="Wpisz kod logowania"
               required
             />

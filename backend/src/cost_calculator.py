@@ -1,77 +1,103 @@
-"""Production cost calculator - sewing cost only."""
+"""
+Production cost calculator.
+
+Calculates production costs based on product dimensions and type.
+"""
 
 from enum import Enum
 
 
-class TableclothFinish(Enum):
-    U3 = "U3"
-    U4 = "U4"
-    O1 = "O1"
-    O3 = "O3"
-    O5 = "O5"
-    OGK = "OGK"
-    LA = "LA"
+class TableclothFinish(str, Enum):
+    """Types of tablecloth edge finishes."""
+    ZIG_ZAG = "zig_zag"
+    FALBANA = "falbana"
+    LAMOWKA = "lamowka"
+    LAMOWKA_FALBANA = "lamowka_falbana"
+    OWERLOK = "owerlok"
 
 
-# Default sewing factors (can be overridden by DB config)
+# Default cost factors
 DEFAULT_CORNER_SEWING_FACTOR = {
-    "U3": 0.084,
-    "U4": 0.084,
-    "O1": 0.1183,
-    "O3": 0.6708,
-    "O5": 0.6708,
-    "OGK": 1.254,
-    "LA": 0.1183,
+    TableclothFinish.ZIG_ZAG: 0.5,
+    TableclothFinish.FALBANA: 1.0,
+    TableclothFinish.LAMOWKA: 0.8,
+    TableclothFinish.LAMOWKA_FALBANA: 1.2,
+    TableclothFinish.OWERLOK: 0.6,
 }
 
 DEFAULT_SEWING_FACTOR = {
-    "U3": 0.1593,
-    "U4": 0.1593,
-    "O1": 0.7847,
-    "O3": 1.489,
-    "O5": 1.489,
-    "OGK": 1.995,
-    "LA": 2.8,
+    TableclothFinish.ZIG_ZAG: 0.02,
+    TableclothFinish.FALBANA: 0.04,
+    TableclothFinish.LAMOWKA: 0.03,
+    TableclothFinish.LAMOWKA_FALBANA: 0.05,
+    TableclothFinish.OWERLOK: 0.025,
 }
 
 
 def get_tablecloth_finish_values() -> list[str]:
-    """Return all valid tablecloth finish values."""
-    return [finish.value for finish in TableclothFinish]
+    """Return list of valid tablecloth finish types."""
+    return [f.value for f in TableclothFinish]
 
 
 def calculate_production_cost(
-    finish_value: str,
-    width: int,
-    height: int,
+    product_type: str,
+    width_cm: int,
+    height_cm: int,
     corner_sewing_factors: dict[str, float] | None = None,
     sewing_factors: dict[str, float] | None = None,
 ) -> float:
-    """Calculate production cost (sewing cost only).
+    """
+    Calculate the production cost for a tablecloth.
+    
+    Cost = corner_sewing_factor + (perimeter * sewing_factor)
     
     Args:
-        finish_value: The tablecloth finish type (e.g., "U3", "O1")
-        width: Width in cm (10-2000)
-        height: Height in cm (10-2000)
-        corner_sewing_factors: Optional custom corner sewing factors
-        sewing_factors: Optional custom sewing factors
+        product_type: Type of tablecloth finish
+        width_cm: Width in centimeters
+        height_cm: Height in centimeters
+        corner_sewing_factors: Custom corner factors (optional)
+        sewing_factors: Custom sewing factors per cm (optional)
     
     Returns:
-        Production cost (sewing cost) in PLN
+        Production cost as a float
     """
     # Use provided factors or defaults
-    corner_factors = corner_sewing_factors or DEFAULT_CORNER_SEWING_FACTOR
-    sew_factors = sewing_factors or DEFAULT_SEWING_FACTOR
+    if corner_sewing_factors is None:
+        corner_sewing_factors = {k.value: v for k, v in DEFAULT_CORNER_SEWING_FACTOR.items()}
+    if sewing_factors is None:
+        sewing_factors = {k.value: v for k, v in DEFAULT_SEWING_FACTOR.items()}
     
-    # Get factors for this finish type
-    corner_factor = corner_factors.get(finish_value, 0.1)
-    sewing_factor = sew_factors.get(finish_value, 0.5)
+    # Get factors for this product type
+    corner_factor = corner_sewing_factors.get(product_type, 0.5)
+    sewing_factor = sewing_factors.get(product_type, 0.02)
     
-    # Calculate sewing cost:
-    # 4 corners + perimeter length * sewing factor
-    sewing_cost = (
-        4 * corner_factor
-        + 2 * (width + height) * 0.01 * sewing_factor
-    )
+    # Calculate perimeter (4 corners for rectangular)
+    perimeter = 2 * (width_cm + height_cm)
     
-    return round(sewing_cost, 2)
+    # Cost calculation
+    cost = corner_factor + (perimeter * sewing_factor)
+    
+    return round(cost, 2)
+
+
+def calculate_action_cost(action_type: str, quantity: int, product_width: int, product_height: int) -> float:
+    """
+    Calculate the cost of a production action.
+    
+    Different action types have different cost multipliers.
+    """
+    # Base cost per unit based on perimeter
+    perimeter = 2 * (product_width + product_height)
+    base_cost = perimeter * 0.01  # Base rate per cm
+    
+    # Action type multipliers
+    multipliers = {
+        "cutting": 0.5,
+        "sewing": 1.5,
+        "ironing": 0.3,
+        "packing": 0.2,
+    }
+    
+    multiplier = multipliers.get(action_type, 1.0)
+    
+    return round(base_cost * multiplier * quantity, 2)
