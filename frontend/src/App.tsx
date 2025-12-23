@@ -2,11 +2,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import WorkerView from './pages/WorkerView';
+import WorkerEntries from './pages/WorkerEntries';
 import AdminDashboard from './pages/AdminDashboard';
-import AdminHistory from './pages/AdminHistory';
-import AdminAddEntry from './pages/AdminAddEntry';
-import AdminSettings from './pages/AdminSettings';
+import AdminOrders from './pages/AdminOrders';
+import AdminProducts from './pages/AdminProducts';
 import AdminWorkers from './pages/AdminWorkers';
+import AdminSync from './pages/AdminSync';
+import AdminCosts from './pages/AdminCosts';
 import type { ReactNode } from 'react';
 
 interface ProtectedRouteProps {
@@ -41,29 +43,44 @@ function AppRoutes() {
           <WorkerView />
         </ProtectedRoute>
       } />
+      <Route path="/worker/entries" element={
+        <ProtectedRoute requiredRole="worker">
+          <WorkerEntries />
+        </ProtectedRoute>
+      } />
       <Route path="/admin" element={
         <ProtectedRoute requiredRole="admin">
           <AdminDashboard />
         </ProtectedRoute>
       } />
-      <Route path="/admin/history" element={
+      <Route path="/admin/orders" element={
         <ProtectedRoute requiredRole="admin">
-          <AdminHistory />
+          <AdminOrders />
         </ProtectedRoute>
       } />
-      <Route path="/admin/add" element={
+      <Route path="/admin/orders/:orderId" element={
         <ProtectedRoute requiredRole="admin">
-          <AdminAddEntry />
+          <AdminOrders />
         </ProtectedRoute>
       } />
-      <Route path="/admin/settings" element={
+      <Route path="/admin/products" element={
         <ProtectedRoute requiredRole="admin">
-          <AdminSettings />
+          <AdminProducts />
         </ProtectedRoute>
       } />
       <Route path="/admin/workers" element={
         <ProtectedRoute requiredRole="admin">
           <AdminWorkers />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/sync" element={
+        <ProtectedRoute requiredRole="admin">
+          <AdminSync />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/stats" element={
+        <ProtectedRoute requiredRole="admin">
+          <AdminCosts />
         </ProtectedRoute>
       } />
     </Routes>

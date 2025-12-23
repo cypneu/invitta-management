@@ -1,145 +1,150 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProductionSummary, getProductionEntries, getWorkers } from '../api';
-import type { User, ProductionSummary, ProductionEntry } from '../types';
+import { getOrders, getSyncStatus, triggerSync } from '../api';
+import type { OrderListItem, SyncStatus } from '../types';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
-  const [summary, setSummary] = useState<ProductionSummary[]>([]);
-  const [entries, setEntries] = useState<ProductionEntry[]>([]);
-  const [workers, setWorkers] = useState<User[]>([]);
-  const [selectedWorker, setSelectedWorker] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
 
   useEffect(() => {
     loadData();
-  }, [selectedWorker, dateFrom, dateTo]);
-
-  useEffect(() => {
-    getWorkers().then(setWorkers);
   }, []);
 
-  async function loadData() {
+  const loadData = async () => {
     setLoading(true);
-    const filters = {
-      workerId: selectedWorker || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-    };
-    const [summaryData, entriesData] = await Promise.all([
-      getProductionSummary(filters),
-      getProductionEntries(filters)
-    ]);
-    setSummary(summaryData);
-    setEntries(entriesData);
-    setLoading(false);
-  }
+    try {
+      const [ordersData, statusData] = await Promise.all([
+        getOrders(),
+        getSyncStatus(),
+      ]);
+      setOrders(ordersData);
+      setSyncStatus(statusData);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const totalQuantity = summary.reduce((acc, s) => acc + s.total_quantity, 0);
-  const totalEntries = summary.reduce((acc, s) => acc + s.entry_count, 0);
-  // Calculate total cost from entries (cost * quantity for each entry)
-  const totalCost = entries.reduce((acc, e) => acc + (e.production_cost * e.quantity), 0);
+  const handleSync = async () => {
+    if (!user) return;
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const result = await triggerSync(user.id);
+      setSyncMessage(result.message);
+      if (result.success) {
+        await loadData();
+      }
+    } catch (err) {
+      setSyncMessage('Synchronizacja nie powiodła się');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const upcomingOrders = orders
+    .filter(o => o.expected_shipment_date)
+    .sort((a, b) => new Date(a.expected_shipment_date!).getTime() - new Date(b.expected_shipment_date!).getTime())
+    .slice(0, 5);
 
   return (
-    <div className="admin-container">
+    <div className="app-container">
       <header className="header">
-        <h1>Panel Administratora</h1>
-        <nav className="nav">
-          <Link to="/admin" className="nav-link active">Podsumowanie</Link>
-          <Link to="/admin/history" className="nav-link">Historia</Link>
-          <Link to="/admin/add" className="nav-link">Dodaj wpis</Link>
-          <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
-          <Link to="/admin/settings" className="nav-link">Ustawienia</Link>
-        </nav>
-        <div className="user-info">
-          <span>{user?.name}</span>
-          <button onClick={logout} className="btn-secondary">Wyloguj</button>
+        <div className="header-content">
+          <h1>Panel Administratora</h1>
+          <div className="header-user">
+            <span>{user?.name}</span>
+            <button onClick={handleLogout} className="btn-secondary btn-sm">Wyloguj</button>
+          </div>
         </div>
       </header>
 
-      <main className="admin-main">
-        <div className="filters-card">
-          <h3>Filtry</h3>
-          <div className="filters-row">
-            <div className="form-group">
-              <label>Pracownik</label>
-              <select value={selectedWorker} onChange={(e) => setSelectedWorker(e.target.value)}>
-                <option value="">Wszyscy pracownicy</option>
-                {workers.map(w => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Od</label>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Do</label>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            </div>
-          </div>
-        </div>
+      <nav className="admin-nav">
+        <Link to="/admin" className="nav-link active">Dashboard</Link>
+        <Link to="/admin/orders" className="nav-link">Zamówienia</Link>
+        <Link to="/admin/products" className="nav-link">Produkty</Link>
+        <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
+        <Link to="/admin/stats" className="nav-link">Statystyki</Link>
+      </nav>
 
-        <div className="stats-row">
-          <div className="stat-card">
-            <span className="stat-value">{totalQuantity}</span>
-            <span className="stat-label">Całkowita ilość</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value">{totalCost.toFixed(2)} zł</span>
-            <span className="stat-label">Całkowity koszt</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value">{totalEntries}</span>
-            <span className="stat-label">Razem wpisów</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-value">{workers.length}</span>
-            <span className="stat-label">Aktywni pracownicy</span>
-          </div>
-        </div>
+      <main className="main-content">
+        {loading ? (
+          <p>Ładowanie...</p>
+        ) : (
+          <>
+            <div className="dashboard-grid">
+              <div className="card stat-card">
+                <h3>Zamówienia</h3>
+                <div className="stat-value">{orders.length}</div>
+                <Link to="/admin/orders" className="stat-link">Zobacz wszystkie →</Link>
+              </div>
 
-        <div className="summary-card">
-          <h3>Podsumowanie produkcji</h3>
-          {loading ? (
-            <p className="loading">Ładowanie...</p>
-          ) : summary.length === 0 ? (
-            <p className="empty">Brak danych produkcji</p>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Pracownik</th>
-                  <th>Rodzaj</th>
-                  <th>Ilość</th>
-                  <th>Koszt</th>
-                  <th>Wpisów</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.map((s, i) => {
-                  // Calculate cost for this worker/product_type from entries
-                  const rowCost = entries
-                    .filter(e => e.worker_id === s.worker_id && e.product_type === s.product_type)
-                    .reduce((acc, e) => acc + (e.production_cost * e.quantity), 0);
-                  return (
-                    <tr key={i}>
-                      <td>{s.worker_name}</td>
-                      <td>{s.product_type}</td>
-                      <td className="num">{s.total_quantity}</td>
-                      <td className="num">{rowCost.toFixed(2)} zł</td>
-                      <td className="num">{s.entry_count}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+              <div className="card stat-card">
+                <h3>Ostatnia synchronizacja</h3>
+                <div className="stat-value">
+                  {syncStatus?.last_sync_at
+                    ? new Date(syncStatus.last_sync_at).toLocaleString('pl-PL')
+                    : 'Nigdy'}
+                </div>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="btn-primary btn-sm stat-button"
+                >
+                  {syncing ? 'Synchronizacja...' : 'Synchronizuj teraz'}
+                </button>
+                {syncMessage && <p className="sync-message">{syncMessage}</p>}
+              </div>
+            </div>
+
+            <div className="card">
+              <h2>Nadchodzące wysyłki</h2>
+              {upcomingOrders.length === 0 ? (
+                <p className="text-muted">Brak zamówień z datą wysyłki</p>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Klient</th>
+                        <th>Źródło</th>
+                        <th>Data wysyłki</th>
+                        <th>Pozycje</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {upcomingOrders.map(order => (
+                        <tr key={order.id}>
+                          <td>
+                            <Link to={`/admin/orders/${order.id}`}>#{order.id}</Link>
+                          </td>
+                          <td>{order.fullname || order.company || '-'}</td>
+                          <td>{order.source || '-'}</td>
+                          <td>{order.expected_shipment_date}</td>
+                          <td>{order.position_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
