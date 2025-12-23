@@ -1,5 +1,5 @@
-# Development Dockerfile for Python 3.14 backend with live reload
-FROM python:3.14-slim
+# Development Dockerfile for Python 3.12 backend with live reload
+FROM python:3.12-slim
 
 WORKDIR /app
 

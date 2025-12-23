@@ -1,8 +1,6 @@
-# Development Docker Compose - with MySQL (matching Hostido)
-
 services:
   db:
-    image: mysql:8.0
+    image: mariadb:10.11
     environment:
       MYSQL_DATABASE: production_tracker
       MYSQL_USER: produser
@@ -13,7 +11,17 @@ services:
     ports:
       - "3306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-prootpass",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10

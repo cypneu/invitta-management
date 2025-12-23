@@ -23,7 +23,6 @@ cp -r backend/alembic hostido-deploy/backend/
 cp backend/alembic.ini hostido-deploy/backend/
 cp backend/passenger_wsgi.py hostido-deploy/backend/
 cp backend/requirements.txt hostido-deploy/backend/
-cp backend/.env.hostido hostido-deploy/backend/.env.example
 
 # Copy frontend build
 echo "Copying frontend build..."
