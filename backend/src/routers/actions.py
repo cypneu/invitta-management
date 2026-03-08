@@ -1,6 +1,7 @@
 """Actions router - Workers add actions to order positions with concurrency control."""
 
 from datetime import date, datetime
+from math import ceil
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -505,6 +506,34 @@ class ActionHistoryItem(BaseModel):
         from_attributes = True
 
 
+class PaginatedActionHistoryResponse(BaseModel):
+    items: list[ActionHistoryItem]
+    total_days: int
+    page: int
+    days_per_page: int
+    total_pages: int
+    first_day: date | None = None
+    last_day: date | None = None
+
+
+def apply_action_history_filters(
+    query,
+    worker_id: Optional[int] = None,
+    action_type: Optional[ActionType] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+):
+    if worker_id:
+        query = query.filter(OrderPositionAction.actor_id == worker_id)
+    if action_type:
+        query = query.filter(OrderPositionAction.action_type == action_type)
+    if date_from:
+        query = query.filter(func.date(OrderPositionAction.timestamp) >= date_from)
+    if date_to:
+        query = query.filter(func.date(OrderPositionAction.timestamp) <= date_to)
+    return query
+
+
 @router.get("/actions/history")
 def list_action_history(
     worker_id: Optional[int] = None,
@@ -526,18 +555,17 @@ def list_action_history(
             joinedload(OrderPositionAction.order_position).joinedload(OrderPosition.order),
         )
     )
-    
-    if worker_id:
-        query = query.filter(OrderPositionAction.actor_id == worker_id)
-    if action_type:
-        query = query.filter(OrderPositionAction.action_type == action_type)
-    if date_from:
-        query = query.filter(func.date(OrderPositionAction.timestamp) >= date_from)
-    if date_to:
-        query = query.filter(func.date(OrderPositionAction.timestamp) <= date_to)
-    
+
+    query = apply_action_history_filters(
+        query,
+        worker_id=worker_id,
+        action_type=action_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
     actions = query.order_by(OrderPositionAction.timestamp.desc()).limit(500).all()
-    
+
     return [
         ActionHistoryItem(
             id=a.id,
@@ -553,6 +581,84 @@ def list_action_history(
         )
         for a in actions
     ]
+
+
+@router.get("/actions/history/paginated", response_model=PaginatedActionHistoryResponse)
+def list_action_history_paginated(
+    worker_id: Optional[int] = None,
+    action_type: Optional[ActionType] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    page: int = Query(1, ge=1),
+    days_per_page: int = Query(10, ge=1, le=31),
+    db: Session = Depends(get_db),
+) -> PaginatedActionHistoryResponse:
+    """Get action history paginated by unique days, not by row count."""
+    day_expr = func.date(OrderPositionAction.timestamp).label("action_day")
+    day_query = apply_action_history_filters(
+        db.query(day_expr),
+        worker_id=worker_id,
+        action_type=action_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    distinct_days_subquery = day_query.distinct().subquery()
+    total_days = db.query(func.count()).select_from(distinct_days_subquery).scalar() or 0
+    total_pages = max(1, ceil(total_days / days_per_page)) if total_days else 1
+    current_page = min(page, total_pages)
+    offset = (current_page - 1) * days_per_page
+
+    selected_days = [
+        action_day
+        for action_day, in (
+            db.query(distinct_days_subquery.c.action_day)
+            .order_by(distinct_days_subquery.c.action_day.desc())
+            .offset(offset)
+            .limit(days_per_page)
+            .all()
+        )
+    ]
+
+    items: list[ActionHistoryItem] = []
+    if selected_days:
+        actions = apply_action_history_filters(
+            db.query(OrderPositionAction).options(
+                joinedload(OrderPositionAction.actor),
+                joinedload(OrderPositionAction.order_position).joinedload(OrderPosition.product),
+                joinedload(OrderPositionAction.order_position).joinedload(OrderPosition.order),
+            ),
+            worker_id=worker_id,
+            action_type=action_type,
+            date_from=date_from,
+            date_to=date_to,
+        ).filter(func.date(OrderPositionAction.timestamp).in_(selected_days))
+
+        items = [
+            ActionHistoryItem(
+                id=a.id,
+                order_position_id=a.order_position_id,
+                order_id=a.order_position.order_id if a.order_position else 0,
+                action_type=a.action_type.value if hasattr(a.action_type, "value") else a.action_type,
+                quantity=a.quantity,
+                actor_id=a.actor_id,
+                actor_name=a.actor.name if a.actor else f"User {a.actor_id}",
+                timestamp=a.timestamp,
+                product_sku=a.order_position.product.sku if a.order_position and a.order_position.product else "N/A",
+                cost=a.cost,
+            )
+            for a in actions.order_by(OrderPositionAction.timestamp.desc()).all()
+        ]
+
+    return PaginatedActionHistoryResponse(
+        items=items,
+        total_days=total_days,
+        page=current_page,
+        days_per_page=days_per_page,
+        total_pages=total_pages,
+        first_day=selected_days[0] if selected_days else None,
+        last_day=selected_days[-1] if selected_days else None,
+    )
 
 
 @router.put("/actions/{action_id}")

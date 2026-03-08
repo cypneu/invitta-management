@@ -1,36 +1,64 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getActionHistory, updateAction, deleteAction, type ActionHistoryItem } from '../api';
+import { getActionHistoryPaginated, getOrdersForWorker, updateAction, deleteAction, type ActionHistoryItem } from '../api';
 import { ACTION_TYPE_LABELS } from '../types';
 
-// Helper to get current week's Monday and Sunday
-function getCurrentWeekDates(): { monday: string; sunday: string } {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
+const DAYS_PER_PAGE = 10;
 
-    return {
-        monday: monday.toISOString().split('T')[0],
-        sunday: sunday.toISOString().split('T')[0],
-    };
+function getVisiblePageNumbers(currentPage: number, totalPages: number): Array<number | string> {
+    if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages: Array<number | string> = [1];
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+
+    if (start > 2) pages.push('left-ellipsis');
+    for (let page = start; page <= end; page += 1) {
+        pages.push(page);
+    }
+    if (end < totalPages - 1) pages.push('right-ellipsis');
+    pages.push(totalPages);
+
+    return pages;
+}
+
+function formatDayRange(firstDay: string | null, lastDay: string | null): string {
+    if (!firstDay || !lastDay) return '';
+
+    const firstLabel = new Date(firstDay).toLocaleDateString('pl-PL');
+    const lastLabel = new Date(lastDay).toLocaleDateString('pl-PL');
+    return firstDay === lastDay ? firstLabel : `${lastLabel} - ${firstLabel}`;
+}
+
+function formatEntryCount(count: number): string {
+    if (count === 1) return '1 wpis';
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+        return `${count} wpisy`;
+    }
+
+    return `${count} wpisów`;
 }
 
 export default function WorkerEntries() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-
-    const weekDates = getCurrentWeekDates();
-    const [dateFrom, setDateFrom] = useState(weekDates.monday);
-    const [dateTo, setDateTo] = useState(weekDates.sunday);
     const [entries, setEntries] = useState<ActionHistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalDays, setTotalDays] = useState(0);
+    const [pageFirstDay, setPageFirstDay] = useState<string | null>(null);
+    const [pageLastDay, setPageLastDay] = useState<string | null>(null);
+    const [activeOrdersCount, setActiveOrdersCount] = useState(0);
 
     // Edit state
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -41,19 +69,34 @@ export default function WorkerEntries() {
             navigate('/');
             return;
         }
-        loadEntries();
-    }, [user, dateFrom, dateTo]);
+        loadEntries(1);
+        loadActiveOrdersCount();
+    }, [user]);
 
-    async function loadEntries() {
+    async function loadEntries(page = currentPage) {
         if (!user) return;
         setLoading(true);
         try {
-            const items = await getActionHistory(user.id, dateFrom || undefined, dateTo || undefined);
-            setEntries(items);
+            const data = await getActionHistoryPaginated(user.id, page, DAYS_PER_PAGE);
+            setEntries(data.items);
+            setCurrentPage(data.page);
+            setTotalPages(data.total_pages);
+            setTotalDays(data.total_days);
+            setPageFirstDay(data.first_day);
+            setPageLastDay(data.last_day);
         } catch {
             setError('Nie udało się załadować wpisów');
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function loadActiveOrdersCount() {
+        try {
+            const orders = await getOrdersForWorker();
+            setActiveOrdersCount(orders.filter(order => order.status === 'in_progress').length);
+        } catch {
+            console.error('Failed to load active orders count');
         }
     }
 
@@ -70,7 +113,7 @@ export default function WorkerEntries() {
             await updateAction(user.id, entryId, qty);
             setEditingId(null);
             setSuccess('Zaktualizowano');
-            loadEntries();
+            loadEntries(currentPage);
             setTimeout(() => setSuccess(null), 2000);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Błąd aktualizacji');
@@ -87,7 +130,7 @@ export default function WorkerEntries() {
         try {
             await deleteAction(user.id, entryId);
             setSuccess('Usunięto');
-            loadEntries();
+            loadEntries(currentPage);
             setTimeout(() => setSuccess(null), 2000);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Błąd usuwania');
@@ -125,6 +168,14 @@ export default function WorkerEntries() {
         return groups;
     })();
 
+    const visiblePages = getVisiblePageNumbers(currentPage, totalPages);
+    const pageRangeLabel = formatDayRange(pageFirstDay, pageLastDay);
+
+    function handlePageChange(page: number) {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        loadEntries(page);
+    }
+
     return (
         <div className="app-container">
             <header className="header">
@@ -138,7 +189,10 @@ export default function WorkerEntries() {
             </header>
 
             <nav className="admin-nav">
-                <Link to="/worker" className="nav-link">Zamówienia</Link>
+                <Link to="/worker" className="nav-link nav-link-with-count">
+                    <span>Zamówienia</span>
+                    <span className="nav-link-count">{activeOrdersCount}</span>
+                </Link>
                 <Link to="/worker/entries" className="nav-link active">Moje wpisy</Link>
             </nav>
 
@@ -146,137 +200,152 @@ export default function WorkerEntries() {
                 {error && <div className="error-message" onClick={() => setError(null)}>{error}</div>}
                 {success && <div className="success-message" onClick={() => setSuccess(null)}>{success}</div>}
 
-                <div className="card entries-filters-card">
-                    <div className="card-header">
-                        <h2>Filtry</h2>
-                    </div>
-                    <div className="card-body">
-                        <div className="filters-row entries-filters">
-                            <div className="form-group">
-                                <label>Od</label>
-                                <input
-                                    type="date"
-                                    value={dateFrom}
-                                    onChange={(e) => setDateFrom(e.target.value)}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label>Do</label>
-                                <input
-                                    type="date"
-                                    value={dateTo}
-                                    onChange={(e) => setDateTo(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <div className="card entries-list-card">
-                    <div className="card-header">
-                        <h2>Wpisy ({entries.length})</h2>
-                    </div>
-                    <div className="card-body">
+                    <div className="card-body entries-card-body">
                         {loading ? (
                             <p>Ładowanie...</p>
                         ) : entries.length === 0 ? (
-                            <p className="text-muted">Brak wpisów w wybranym okresie</p>
+                            <p className="text-muted">Brak wpisów</p>
                         ) : (
-                            <div className="table-responsive">
-                                <table className="data-table entries-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Data</th>
-                                            <th>Produkt</th>
-                                            <th>Akcja</th>
-                                            <th className="num">Ilość</th>
-                                            <th className="num">Koszt</th>
-                                            <th>Akcje</th>
-                                        </tr>
-                                    </thead>
-                                    {groupedEntries.map((group) => (
-                                        <tbody key={group.key}>
-                                            <tr className="entries-group-row">
-                                                <td colSpan={6}>{group.label}</td>
+                            <>
+                                <div className="table-responsive">
+                                    <table className="data-table entries-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Data</th>
+                                                <th>Produkt</th>
+                                                <th>Akcja</th>
+                                                <th className="num">Ilość</th>
+                                                <th className="num">Koszt</th>
+                                                <th>Akcje</th>
                                             </tr>
-                                            {group.items.map(entry => (
-                                                <tr key={entry.id}>
-                                                    <td data-label="Data">
-                                                        <span className="entry-value">{new Date(entry.timestamp).toLocaleString('pl-PL')}</span>
-                                                    </td>
-                                                    <td data-label="Produkt">
-                                                        <span className="entry-value">{entry.product_sku}</span>
-                                                    </td>
-                                                    <td data-label="Akcja">
-                                                        <span className="entry-value">
-                                                            {ACTION_TYPE_LABELS[entry.action_type as keyof typeof ACTION_TYPE_LABELS] || entry.action_type}
-                                                        </span>
-                                                    </td>
-                                                    <td data-label="Ilość" className="num">
-                                                        {editingId === entry.id ? (
-                                                            <span className="entry-value">
-                                                                <input
-                                                                    type="number"
-                                                                    min="1"
-                                                                    value={editQuantity}
-                                                                    onChange={(e) => setEditQuantity(e.target.value)}
-                                                                    className="qty-input-sm"
-                                                                    autoFocus
-                                                                />
-                                                            </span>
-                                                        ) : (
-                                                            <span className="entry-value">{entry.quantity}</span>
-                                                        )}
-                                                    </td>
-                                                    <td data-label="Koszt" className="num">
-                                                        <span className="entry-value">{entry.cost ? formatCurrency(entry.cost) : '-'}</span>
-                                                    </td>
-                                                    <td data-label="Akcje" className="actions-cell">
-                                                        <div className="entry-actions">
-                                                            {editingId === entry.id ? (
-                                                                <>
-                                                                    <button
-                                                                        className="btn-primary btn-xs"
-                                                                        onClick={() => handleUpdate(entry.id)}
-                                                                        disabled={submitting}
-                                                                    >
-                                                                        ✓
-                                                                    </button>
-                                                                    <button
-                                                                        className="btn-secondary btn-xs"
-                                                                        onClick={() => setEditingId(null)}
-                                                                    >
-                                                                        ×
-                                                                    </button>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <button
-                                                                        className="btn-secondary btn-xs"
-                                                                        onClick={() => {
-                                                                            setEditingId(entry.id);
-                                                                            setEditQuantity(String(entry.quantity));
-                                                                        }}
-                                                                    >
-                                                                        ✎
-                                                                    </button>
-                                                                    <button
-                                                                        className="btn-danger btn-xs"
-                                                                        onClick={() => handleDelete(entry.id)}
-                                                                        disabled={submitting}
-                                                                    >
-                                                                        ×
-                                                                    </button>
-                                                                </>
-                                                            )}
+                                        </thead>
+                                        {groupedEntries.map((group) => (
+                                            <tbody key={group.key}>
+                                                <tr className="entries-group-row">
+                                                    <td colSpan={6}>
+                                                        <div className="entries-group-label">
+                                                            <span className="entries-group-date">{group.label}</span>
+                                                            <span className="entries-group-count">{formatEntryCount(group.items.length)}</span>
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    ))}
-                                </table>
-                            </div>
+                                                {group.items.map(entry => (
+                                                    <tr key={entry.id}>
+                                                        <td data-label="Data">
+                                                            <span className="entry-value">{new Date(entry.timestamp).toLocaleString('pl-PL')}</span>
+                                                        </td>
+                                                        <td data-label="Produkt">
+                                                            <span className="entry-value">{entry.product_sku}</span>
+                                                        </td>
+                                                        <td data-label="Akcja">
+                                                            <span className="entry-value">
+                                                                {ACTION_TYPE_LABELS[entry.action_type as keyof typeof ACTION_TYPE_LABELS] || entry.action_type}
+                                                            </span>
+                                                        </td>
+                                                        <td data-label="Ilość" className="num">
+                                                            {editingId === entry.id ? (
+                                                                <span className="entry-value">
+                                                                    <input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={editQuantity}
+                                                                        onChange={(e) => setEditQuantity(e.target.value)}
+                                                                        className="qty-input-sm"
+                                                                        autoFocus
+                                                                    />
+                                                                </span>
+                                                            ) : (
+                                                                <span className="entry-value">{entry.quantity}</span>
+                                                            )}
+                                                        </td>
+                                                        <td data-label="Koszt" className="num">
+                                                            <span className="entry-value">{entry.cost ? formatCurrency(entry.cost) : '-'}</span>
+                                                        </td>
+                                                        <td data-label="Akcje" className="actions-cell">
+                                                            <div className="entry-actions">
+                                                                {editingId === entry.id ? (
+                                                                    <>
+                                                                        <button
+                                                                            className="btn-primary btn-xs"
+                                                                            onClick={() => handleUpdate(entry.id)}
+                                                                            disabled={submitting}
+                                                                        >
+                                                                            ✓
+                                                                        </button>
+                                                                        <button
+                                                                            className="btn-secondary btn-xs"
+                                                                            onClick={() => setEditingId(null)}
+                                                                        >
+                                                                            ×
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <button
+                                                                            className="btn-secondary btn-xs"
+                                                                            onClick={() => {
+                                                                                setEditingId(entry.id);
+                                                                                setEditQuantity(String(entry.quantity));
+                                                                            }}
+                                                                        >
+                                                                            ✎
+                                                                        </button>
+                                                                        <button
+                                                                            className="btn-danger btn-xs"
+                                                                            onClick={() => handleDelete(entry.id)}
+                                                                            disabled={submitting}
+                                                                        >
+                                                                            ×
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        ))}
+                                    </table>
+                                </div>
+
+                                <div className="pagination-bar">
+                                    <div className="pagination-summary">
+                                        {pageRangeLabel
+                                            ? `Zakres strony: ${pageRangeLabel} • ${totalDays} dni łącznie`
+                                            : `Łącznie dni: ${totalDays}`}
+                                    </div>
+                                    <div className="pagination-controls">
+                                        <button
+                                            className="pagination-btn"
+                                            onClick={() => handlePageChange(currentPage - 1)}
+                                            disabled={currentPage === 1}
+                                        >
+                                            Poprzednia
+                                        </button>
+                                        {visiblePages.map(page => (
+                                            typeof page === 'number' ? (
+                                                <button
+                                                    key={page}
+                                                    className={`pagination-btn pagination-page-btn ${page === currentPage ? 'active' : ''}`}
+                                                    onClick={() => handlePageChange(page)}
+                                                >
+                                                    {page}
+                                                </button>
+                                            ) : (
+                                                <span key={page} className="pagination-ellipsis">…</span>
+                                            )
+                                        ))}
+                                        <button
+                                            className="pagination-btn"
+                                            onClick={() => handlePageChange(currentPage + 1)}
+                                            disabled={currentPage === totalPages}
+                                        >
+                                            Następna
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>

@@ -1,16 +1,44 @@
 """Products router - Product management with CRUD operations."""
 
+from math import ceil
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Product, ShapeType, User
-from ..schemas import ProductResponse, ProductCreate, ProductUpdate
+from ..schemas import ProductResponse, ProductCreate, ProductUpdate, PaginatedProductListResponse
 from .users import get_current_user
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+
+def apply_product_filters(
+    query,
+    fabric: Optional[str] = None,
+    pattern: Optional[str] = None,
+    shape: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    if fabric:
+        query = query.filter(Product.fabric == fabric)
+    if pattern:
+        query = query.filter(Product.pattern == pattern)
+    if shape:
+        try:
+            shape_enum = ShapeType(shape)
+            query = query.filter(Product.shape == shape_enum)
+        except ValueError:
+            pass
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Product.sku.ilike(search_term))
+            | (Product.fabric.ilike(search_term))
+            | (Product.pattern.ilike(search_term))
+        )
+    return query
 
 
 @router.get("/", response_model=list[ProductResponse])
@@ -22,27 +50,54 @@ def list_products(
     db: Session = Depends(get_db),
 ):
     """List all products with optional filters."""
-    query = db.query(Product)
-
-    if fabric:
-        query = query.filter(Product.fabric == fabric)
-    if pattern:
-        query = query.filter(Product.pattern == pattern)
-    if shape:
-        try:
-            shape_enum = ShapeType(shape)
-            query = query.filter(Product.shape == shape_enum)
-        except ValueError:
-            pass  # Invalid shape, ignore filter
-    if search:
-        search_term = f"%{search}%"
-        query = query.filter(
-            (Product.sku.ilike(search_term))
-            | (Product.fabric.ilike(search_term))
-            | (Product.pattern.ilike(search_term))
-        )
-
+    query = apply_product_filters(
+        db.query(Product),
+        fabric=fabric,
+        pattern=pattern,
+        shape=shape,
+        search=search,
+    )
     return query.order_by(Product.sku).all()
+
+
+@router.get("/paginated", response_model=PaginatedProductListResponse)
+def list_products_paginated(
+    fabric: Optional[str] = None,
+    pattern: Optional[str] = None,
+    shape: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """List products for admin table with backend pagination."""
+    query = apply_product_filters(
+        db.query(Product),
+        fabric=fabric,
+        pattern=pattern,
+        shape=shape,
+        search=search,
+    )
+
+    total = query.count()
+    total_pages = max(1, ceil(total / page_size)) if total else 1
+    current_page = min(page, total_pages)
+    offset = (current_page - 1) * page_size
+
+    items = (
+        query.order_by(Product.sku)
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    return PaginatedProductListResponse(
+        items=items,
+        total=total,
+        page=current_page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/shapes/", response_model=list[str])

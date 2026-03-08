@@ -3,7 +3,9 @@ import type {
     Product, ProductCreate, ProductUpdate,
     Order, OrderListItem, OrderCreate, OrderUpdate, OrderStatus,
     Action, ActionCreate, OrderPositionWithActions,
-    SyncStatus, SyncResult, OrderFilters, ActionType
+    SyncStatus, SyncResult, OrderFilters, ActionType,
+    PaginatedOrderFilters, PaginatedOrderListResponse,
+    PaginatedProductFilters, PaginatedProductListResponse
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -84,6 +86,15 @@ export async function getProducts(search?: string): Promise<Product[]> {
     return response.json();
 }
 
+export async function getProductsPaginated(filters: PaginatedProductFilters = {}): Promise<PaginatedProductListResponse> {
+    const params = new URLSearchParams();
+    if (filters.search) params.append('search', filters.search);
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.pageSize) params.append('page_size', String(filters.pageSize));
+    const response = await fetch(`${API_BASE}/api/products/paginated?${params}`);
+    return response.json();
+}
+
 export async function getProduct(productId: number): Promise<Product> {
     const response = await fetch(`${API_BASE}/api/products/${productId}`);
     if (!response.ok) {
@@ -142,6 +153,24 @@ export async function getOrders(filters: OrderFilters = {}): Promise<OrderListIt
     if (filters.dateTo) params.append('date_to', filters.dateTo);
     if (filters.search) params.append('search', filters.search);
     const response = await fetch(`${API_BASE}/api/orders/?${params}`);
+    return response.json();
+}
+
+export async function getOrdersPaginated(filters: PaginatedOrderFilters = {}): Promise<PaginatedOrderListResponse> {
+    const params = new URLSearchParams();
+    if (filters.source) params.append('source', filters.source);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.dateFrom) params.append('date_from', filters.dateFrom);
+    if (filters.dateTo) params.append('date_to', filters.dateTo);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.pageSize) params.append('page_size', String(filters.pageSize));
+    const response = await fetch(`${API_BASE}/api/orders/paginated?${params}`);
+    return response.json();
+}
+
+export async function getOrderSources(): Promise<string[]> {
+    const response = await fetch(`${API_BASE}/api/orders/sources`);
     return response.json();
 }
 
@@ -326,6 +355,16 @@ export interface ActionHistoryItem {
     cost: number | null;
 }
 
+export interface PaginatedActionHistoryResponse {
+    items: ActionHistoryItem[];
+    total_days: number;
+    page: number;
+    days_per_page: number;
+    total_pages: number;
+    first_day: string | null;
+    last_day: string | null;
+}
+
 export async function getActionHistory(
     workerId?: number,
     dateFrom?: string,
@@ -338,6 +377,21 @@ export async function getActionHistory(
     if (dateTo) params.append('date_to', dateTo);
     if (actionType) params.append('action_type', actionType);
     const response = await fetch(`${API_BASE}/api/actions/history?${params}`);
+    return response.json();
+}
+
+export async function getActionHistoryPaginated(
+    workerId?: number,
+    page = 1,
+    daysPerPage = 10,
+    actionType?: ActionType
+): Promise<PaginatedActionHistoryResponse> {
+    const params = new URLSearchParams();
+    if (workerId) params.append('worker_id', String(workerId));
+    if (actionType) params.append('action_type', actionType);
+    params.append('page', String(page));
+    params.append('days_per_page', String(daysPerPage));
+    const response = await fetch(`${API_BASE}/api/actions/history/paginated?${params}`);
     return response.json();
 }
 

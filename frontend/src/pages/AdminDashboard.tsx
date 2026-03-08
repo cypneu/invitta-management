@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getOrders, getSyncStatus, triggerSync } from '../api';
 import type { OrderListItem, SyncStatus } from '../types';
+import { ORDER_STATUS_LABELS } from '../types';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -55,6 +56,20 @@ export default function AdminDashboard() {
     navigate('/');
   };
 
+  const orderCounts = useMemo(() => ({
+    all: orders.length,
+    fetched: orders.filter(order => order.status === 'fetched').length,
+    in_progress: orders.filter(order => order.status === 'in_progress').length,
+    done: orders.filter(order => order.status === 'done').length,
+  }), [orders]);
+
+  const orderSummaryItems = [
+    { key: 'all', label: 'Wszystkie', value: orderCounts.all },
+    { key: 'fetched', label: ORDER_STATUS_LABELS.fetched, value: orderCounts.fetched },
+    { key: 'in_progress', label: ORDER_STATUS_LABELS.in_progress, value: orderCounts.in_progress },
+    { key: 'done', label: ORDER_STATUS_LABELS.done, value: orderCounts.done },
+  ];
+
   const upcomingOrders = orders
     .filter(o => o.expected_shipment_date)
     .sort((a, b) => new Date(a.expected_shipment_date!).getTime() - new Date(b.expected_shipment_date!).getTime())
@@ -87,10 +102,19 @@ export default function AdminDashboard() {
         ) : (
           <>
             <div className="dashboard-grid">
-              <div className="card stat-card">
-                <h3>Zamówienia</h3>
-                <div className="stat-value">{orders.length}</div>
-                <Link to="/admin/orders" className="stat-link">Zobacz wszystkie →</Link>
+              <div className="card dashboard-orders-card">
+                <div className="dashboard-orders-header">
+                  <h3>Zamówienia</h3>
+                  <Link to="/admin/orders" className="stat-link">Zobacz wszystkie →</Link>
+                </div>
+                <div className="dashboard-orders-summary">
+                  {orderSummaryItems.map(item => (
+                    <div key={item.key} className="dashboard-orders-summary-item">
+                      <span className="dashboard-orders-summary-label">{item.label}</span>
+                      <span className="dashboard-orders-summary-value">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="card stat-card">

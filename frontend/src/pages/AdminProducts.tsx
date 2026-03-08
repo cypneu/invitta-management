@@ -2,13 +2,34 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import type { Product, ProductCreate, ProductUpdate, ShapeType } from '../types';
-import { getProducts, createProduct, updateProduct, deleteProduct, getShapes } from '../api';
+import { getProductsPaginated, createProduct, updateProduct, deleteProduct, getShapes } from '../api';
 
 const SHAPE_LABELS: Record<ShapeType, string> = {
     rectangular: 'Prostokątny',
     round: 'Okrągły',
     oval: 'Owalny',
 };
+
+const PAGE_SIZE = 20;
+
+function getVisiblePageNumbers(currentPage: number, totalPages: number): Array<number | string> {
+    if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages: Array<number | string> = [1];
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+
+    if (start > 2) pages.push('left-ellipsis');
+    for (let page = start; page <= end; page += 1) {
+        pages.push(page);
+    }
+    if (end < totalPages - 1) pages.push('right-ellipsis');
+    pages.push(totalPages);
+
+    return pages;
+}
 
 export default function AdminProducts() {
     const { user, logout } = useAuth();
@@ -18,6 +39,9 @@ export default function AdminProducts() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalProducts, setTotalProducts] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
@@ -33,18 +57,21 @@ export default function AdminProducts() {
     });
 
     useEffect(() => {
-        loadData();
+        loadShapes();
     }, []);
 
-    async function loadData() {
+    async function loadData(page = currentPage) {
         try {
             setLoading(true);
-            const [productsData, shapesData] = await Promise.all([
-                getProducts(search || undefined),
-                getShapes(),
-            ]);
-            setProducts(productsData);
-            setShapes(shapesData);
+            const data = await getProductsPaginated({
+                search: search.trim() || undefined,
+                page,
+                pageSize: PAGE_SIZE,
+            });
+            setProducts(data.items);
+            setCurrentPage(data.page);
+            setTotalProducts(data.total);
+            setTotalPages(data.total_pages);
         } catch (err) {
             setError('Nie udało się załadować produktów');
         } finally {
@@ -52,8 +79,17 @@ export default function AdminProducts() {
         }
     }
 
+    async function loadShapes() {
+        try {
+            const shapesData = await getShapes();
+            setShapes(shapesData);
+        } catch {
+            console.error('Failed to load shapes');
+        }
+    }
+
     useEffect(() => {
-        const timer = setTimeout(() => loadData(), 300);
+        const timer = setTimeout(() => loadData(1), 300);
         return () => clearTimeout(timer);
     }, [search]);
 
@@ -105,7 +141,7 @@ export default function AdminProducts() {
                 await createProduct(user.id, formData);
             }
             setShowModal(false);
-            loadData();
+            loadData(currentPage);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Nie udało się zapisać produktu');
         }
@@ -117,7 +153,7 @@ export default function AdminProducts() {
 
         try {
             await deleteProduct(user.id, product.id);
-            loadData();
+            loadData(currentPage);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Nie udało się usunąć produktu');
         }
@@ -136,6 +172,15 @@ export default function AdminProducts() {
             return `${product.width}x${product.height}`;
         }
         return '-';
+    }
+
+    const pageStart = totalProducts === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+    const pageEnd = totalProducts === 0 ? 0 : pageStart + products.length - 1;
+    const visiblePages = getVisiblePageNumbers(currentPage, totalPages);
+
+    function handlePageChange(page: number) {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        loadData(page);
     }
 
     return (
@@ -163,7 +208,7 @@ export default function AdminProducts() {
 
                 <div className="card">
                     <div className="card-header">
-                        <h2>Produkty ({products.length})</h2>
+                        <h2>Produkty ({totalProducts})</h2>
                         <div className="card-header-actions">
                             <input
                                 type="text"
@@ -186,48 +231,85 @@ export default function AdminProducts() {
                             <p className="text-muted">Produkty są automatycznie tworzone podczas synchronizacji z Baselinker i Invitta lub możesz je dodać ręcznie.</p>
                         </div>
                     ) : (
-                        <div className="table-wrapper">
-                            <table className="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>SKU</th>
-                                        <th>Tkanina</th>
-                                        <th>Wzór</th>
-                                        <th>Wykończenie</th>
-                                        <th>Kształt</th>
-                                        <th>Wymiary</th>
-                                        <th>Akcje</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {products.map((product) => (
-                                        <tr key={product.id}>
-                                            <td><strong>{product.sku}</strong></td>
-                                            <td>{product.fabric}</td>
-                                            <td>{product.pattern}</td>
-                                            <td>{product.edge_type || '-'}</td>
-                                            <td>{SHAPE_LABELS[product.shape] || product.shape}</td>
-                                            <td>{formatDimensions(product)}</td>
-                                            <td>
-                                                <button
-                                                    onClick={() => openEditModal(product)}
-                                                    className="btn-secondary btn-sm"
-                                                >
-                                                    Edytuj
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(product)}
-                                                    className="btn-danger btn-sm"
-                                                    style={{ marginLeft: '0.5rem' }}
-                                                >
-                                                    Usuń
-                                                </button>
-                                            </td>
+                        <>
+                            <div className="table-wrapper">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>SKU</th>
+                                            <th>Tkanina</th>
+                                            <th>Wzór</th>
+                                            <th>Wykończenie</th>
+                                            <th>Kształt</th>
+                                            <th>Wymiary</th>
+                                            <th>Akcje</th>
                                         </tr>
+                                    </thead>
+                                    <tbody>
+                                        {products.map((product) => (
+                                            <tr key={product.id}>
+                                                <td><strong>{product.sku}</strong></td>
+                                                <td>{product.fabric}</td>
+                                                <td>{product.pattern}</td>
+                                                <td>{product.edge_type || '-'}</td>
+                                                <td>{SHAPE_LABELS[product.shape] || product.shape}</td>
+                                                <td>{formatDimensions(product)}</td>
+                                                <td>
+                                                    <button
+                                                        onClick={() => openEditModal(product)}
+                                                        className="btn-secondary btn-sm"
+                                                    >
+                                                        Edytuj
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(product)}
+                                                        className="btn-danger btn-sm"
+                                                        style={{ marginLeft: '0.5rem' }}
+                                                    >
+                                                        Usuń
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="pagination-bar">
+                                <div className="pagination-summary">
+                                    Pokazano {pageStart}-{pageEnd} z {totalProducts} produktów
+                                </div>
+                                <div className="pagination-controls">
+                                    <button
+                                        className="pagination-btn"
+                                        onClick={() => handlePageChange(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                    >
+                                        Poprzednia
+                                    </button>
+                                    {visiblePages.map(page => (
+                                        typeof page === 'number' ? (
+                                            <button
+                                                key={page}
+                                                className={`pagination-btn pagination-page-btn ${page === currentPage ? 'active' : ''}`}
+                                                onClick={() => handlePageChange(page)}
+                                            >
+                                                {page}
+                                            </button>
+                                        ) : (
+                                            <span key={page} className="pagination-ellipsis">…</span>
+                                        )
                                     ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                    <button
+                                        className="pagination-btn"
+                                        onClick={() => handlePageChange(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                    >
+                                        Następna
+                                    </button>
+                                </div>
+                            </div>
+                        </>
                     )}
                 </div>
             </main>

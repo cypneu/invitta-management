@@ -64,6 +64,20 @@ export interface ProductUpdate {
     edge_type?: EdgeType | null;
 }
 
+export interface PaginatedProductFilters {
+    search?: string;
+    page?: number;
+    pageSize?: number;
+}
+
+export interface PaginatedProductListResponse {
+    items: Product[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+}
+
 export interface OrderPosition {
     id: number;
     order_id: number;
@@ -181,6 +195,28 @@ export interface OrderFilters {
     dateFrom?: string;
     dateTo?: string;
     search?: string;
+}
+
+export interface PaginatedOrderFilters extends OrderFilters {
+    page?: number;
+    pageSize?: number;
+}
+
+export interface OrderStatusCounts {
+    all: number;
+    fetched: number;
+    in_progress: number;
+    done: number;
+    cancelled: number;
+}
+
+export interface PaginatedOrderListResponse {
+    items: OrderListItem[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+    status_counts: OrderStatusCounts;
 }
 
 export const ACTION_TYPE_LABELS: Record<ActionType, string> = {

@@ -90,6 +90,14 @@ class ProductResponse(BaseModel):
         from_attributes = True
 
 
+class PaginatedProductListResponse(BaseModel):
+    items: list[ProductResponse] = []
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class ProductCreate(BaseModel):
     sku: str = Field(..., min_length=1, max_length=512)
     fabric: str = Field(..., min_length=1, max_length=255)
@@ -200,6 +208,23 @@ class OrderWithPositionsListResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class OrderStatusCountsResponse(BaseModel):
+    all: int = 0
+    fetched: int = 0
+    in_progress: int = 0
+    done: int = 0
+    cancelled: int = 0
+
+
+class PaginatedOrderWithPositionsListResponse(BaseModel):
+    items: list[OrderWithPositionsListResponse] = []
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    status_counts: OrderStatusCountsResponse
 
 
 # Order Position Action schemas

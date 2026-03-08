@@ -247,14 +247,14 @@ export default function WorkerView() {
             const client = (o.fullname || o.company || '').toLowerCase();
             const date = formatDate(o.expected_shipment_date).toLowerCase();
             const skus = o.positions.map(p => p.product.sku.toLowerCase());
-            const externalId = o.external_id || '';
+            const externalId = (o.external_id || '').toLowerCase();
             return client.includes(q) || date.includes(q) || skus.some(sku => sku.includes(q)) || externalId.includes(q);
         });
     };
 
     const filteredOrders = filterOrders(ordersWithPositions);
-    const inProgressOrders = filteredOrders.filter(o => o.status === 'in_progress');
-    const doneOrders = filteredOrders.filter(o => o.status === 'done');
+    const visibleOrders = filteredOrders.filter(o => o.status === 'in_progress');
+    const activeOrdersCount = ordersWithPositions.filter(o => o.status === 'in_progress').length;
 
     const allowedTypes = user?.allowed_action_types || [];
 
@@ -325,19 +325,35 @@ export default function WorkerView() {
             </header>
 
             <nav className="admin-nav">
-                <Link to="/worker" className="nav-link active">Zamówienia</Link>
+                <Link to="/worker" className="nav-link nav-link-with-count active">
+                    <span>Zamówienia</span>
+                    <span className="nav-link-count">{activeOrdersCount}</span>
+                </Link>
                 <Link to="/worker/entries" className="nav-link">Moje wpisy</Link>
             </nav>
 
             {/* Search bar */}
             <div className="worker-search-bar">
-                <input
-                    type="text"
-                    placeholder="Szukaj po kliencie, SKU lub dacie..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="search-input"
-                />
+                <div className="worker-search-input-wrapper">
+                    <input
+                        type="text"
+                        placeholder="Szukaj po kliencie, SKU lub dacie..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="search-input"
+                    />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            className="worker-search-clear"
+                            onClick={() => setSearchQuery('')}
+                            aria-label="Wyczyść wyszukiwanie"
+                            title="Wyczyść"
+                        >
+                            ×
+                        </button>
+                    )}
+                </div>
             </div>
 
             <main className="main-content">
@@ -346,30 +362,16 @@ export default function WorkerView() {
 
                 {loading ? (
                     <p>Ładowanie...</p>
-                ) : filteredOrders.length === 0 ? (
+                ) : visibleOrders.length === 0 ? (
                     <div className="card">
                         <p className="text-muted">{searchQuery ? 'Brak wyników wyszukiwania' : 'Brak zamówień do wyświetlenia'}</p>
                     </div>
                 ) : (
-                    <>
-                        {inProgressOrders.length > 0 && (
-                            <div className="orders-section">
-                                <h2 className="section-title">W realizacji ({inProgressOrders.length})</h2>
-                                <div className="orders-list">
-                                    {inProgressOrders.map(renderOrderCard)}
-                                </div>
-                            </div>
-                        )}
-
-                        {doneOrders.length > 0 && (
-                            <div className="orders-section done-section">
-                                <h2 className="section-title">Gotowe ({doneOrders.length})</h2>
-                                <div className="orders-list">
-                                    {doneOrders.map(renderOrderCard)}
-                                </div>
-                            </div>
-                        )}
-                    </>
+                    <div className="orders-section">
+                        <div className="orders-list">
+                            {visibleOrders.map(renderOrderCard)}
+                        </div>
+                    </div>
                 )}
             </main>
 

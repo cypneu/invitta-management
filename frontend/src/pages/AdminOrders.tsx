@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getOrders, getOrder, createOrder, deleteOrder, updateOrder, getProducts, getOrderPositions, getPositionActions, addPosition, deletePosition, updateOrderStatus, bulkUpdateOrderStatus, updateAction, deleteAction, updateOrderShipmentDate } from '../api';
-import type { OrderListItem, Order, Product, OrderPositionWithActions, ActionType, OrderStatus, Action } from '../types';
+import { getOrdersPaginated, getOrderSources, getOrder, createOrder, deleteOrder, updateOrder, getProducts, getOrderPositions, getPositionActions, addPosition, deletePosition, updateOrderStatus, bulkUpdateOrderStatus, updateAction, deleteAction, updateOrderShipmentDate } from '../api';
+import type { OrderListItem, Order, Product, OrderPositionWithActions, ActionType, OrderStatus, Action, OrderStatusCounts } from '../types';
 import { ACTION_TYPE_LABELS, ORDER_STATUS_LABELS, SYNC_LABELS } from '../types';
 
 // Helper to format date as DD-MM-YYYY
@@ -23,6 +23,27 @@ function formatTime(timestamp: string): string {
 function formatIntegration(integration: string | null): string {
     if (!integration) return '-';
     return SYNC_LABELS[integration as keyof typeof SYNC_LABELS] || integration;
+}
+
+const PAGE_SIZE = 20;
+
+function getVisiblePageNumbers(currentPage: number, totalPages: number): Array<number | string> {
+    if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages: Array<number | string> = [1];
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+
+    if (start > 2) pages.push('left-ellipsis');
+    for (let page = start; page <= end; page += 1) {
+        pages.push(page);
+    }
+    if (end < totalPages - 1) pages.push('right-ellipsis');
+    pages.push(totalPages);
+
+    return pages;
 }
 
 export default function AdminOrders() {
@@ -46,6 +67,16 @@ export default function AdminOrders() {
     const [dateTo, setDateTo] = useState('');
     const [statusFilter, setStatusFilter] = useState<OrderStatus | ''>('');
     const [sourceFilter, setSourceFilter] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalOrders, setTotalOrders] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [statusCounts, setStatusCounts] = useState<OrderStatusCounts>({
+        all: 0,
+        fetched: 0,
+        in_progress: 0,
+        done: 0,
+        cancelled: 0,
+    });
 
     // Selection for bulk actions
     const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
@@ -71,21 +102,17 @@ export default function AdminOrders() {
     const [editingDateOrderId, setEditingDateOrderId] = useState<number | null>(null);
     const [editingDateValue, setEditingDateValue] = useState('');
 
-    // Track if sources have been loaded
-    const sourcesLoaded = useRef(false);
-
     useEffect(() => {
         loadProducts();
-        loadOrders();
+        loadSources();
     }, []);
 
-    // Real-time filtering with debounce
     useEffect(() => {
         const timer = setTimeout(() => {
-            loadOrders();
+            loadOrders(1);
         }, 300);
         return () => clearTimeout(timer);
-    }, [dateFrom, dateTo, statusFilter, sourceFilter]);
+    }, [search, dateFrom, dateTo, statusFilter, sourceFilter]);
 
     useEffect(() => {
         if (orderId) {
@@ -97,29 +124,37 @@ export default function AdminOrders() {
         }
     }, [orderId]);
 
-    const loadOrders = async () => {
+    const loadOrders = async (page = currentPage) => {
         setLoading(true);
         setSelectedOrderIds(new Set());
         try {
-            // Orders now include positions with action_totals - no N+1!
-            const data = await getOrders({
-                dateFrom,
-                dateTo,
+            const data = await getOrdersPaginated({
+                search: search.trim() || undefined,
+                dateFrom: dateFrom || undefined,
+                dateTo: dateTo || undefined,
                 status: statusFilter || undefined,
                 source: sourceFilter || undefined,
+                page,
+                pageSize: PAGE_SIZE,
             });
-            setOrders(data);
-
-            // Store all unique sources on first load only
-            if (!sourcesLoaded.current) {
-                const sources = new Set(data.filter(o => o.source).map(o => o.source!));
-                setAllSources(Array.from(sources).sort());
-                sourcesLoaded.current = true;
-            }
+            setOrders(data.items);
+            setCurrentPage(data.page);
+            setTotalOrders(data.total);
+            setTotalPages(data.total_pages);
+            setStatusCounts(data.status_counts);
         } catch {
             setError('Nie udało się załadować zamówień');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadSources = async () => {
+        try {
+            const sources = await getOrderSources();
+            setAllSources(sources);
+        } catch {
+            console.error('Failed to load order sources');
         }
     };
 
@@ -153,18 +188,6 @@ export default function AdminOrders() {
         }
     };
 
-    // Client-side filter for search
-    const filteredOrders = useMemo(() => {
-        if (!search.trim()) return orders;
-        const q = search.toLowerCase();
-        return orders.filter(o => {
-            const client = (o.fullname || o.company || '').toLowerCase();
-            const externalId = o.external_id || '';
-            const id = String(o.id);
-            return client.includes(q) || externalId.includes(q) || id.includes(q);
-        });
-    }, [orders, search]);
-
     const handleCreateOrder = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
@@ -176,7 +199,7 @@ export default function AdminOrders() {
             });
             setShowCreateForm(false);
             setNewOrder({ fullname: '', company: '', expected_shipment_date: '' });
-            await loadOrders();
+            await loadOrders(currentPage);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Nie udało się utworzyć zamówienia');
         }
@@ -186,7 +209,7 @@ export default function AdminOrders() {
         if (!user || !confirm('Czy na pewno chcesz usunąć to zamówienie?')) return;
         try {
             await deleteOrder(user.id, id);
-            await loadOrders();
+            await loadOrders(currentPage);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Nie udało się usunąć zamówienia');
         }
@@ -196,7 +219,7 @@ export default function AdminOrders() {
         if (!user) return;
         try {
             await updateOrderStatus(user.id, orderId, newStatus);
-            await loadOrders();
+            await loadOrders(currentPage);
             if (selectedOrder?.id === orderId) {
                 await loadOrderDetails(orderId);
             }
@@ -245,10 +268,10 @@ export default function AdminOrders() {
     };
 
     const toggleSelectAll = () => {
-        if (selectedOrderIds.size === filteredOrders.length && filteredOrders.length > 0) {
+        if (selectedOrderIds.size === orders.length && orders.length > 0) {
             setSelectedOrderIds(new Set());
         } else {
-            setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+            setSelectedOrderIds(new Set(orders.map(o => o.id)));
         }
     };
 
@@ -294,7 +317,7 @@ export default function AdminOrders() {
         try {
             await updateOrderShipmentDate(user.id, orderId, editingDateValue || null);
             setEditingDateOrderId(null);
-            loadOrders();
+            loadOrders(currentPage);
             setSuccess('Data zaktualizowana');
             setTimeout(() => setSuccess(''), 2000);
         } catch (err) {
@@ -343,8 +366,22 @@ export default function AdminOrders() {
         }
     };
 
-    const totalOrdersCount = filteredOrders.length;
+    const totalOrdersCount = orders.length;
     const selectedCount = selectedOrderIds.size;
+    const statusTabs: Array<{ value: OrderStatus | ''; label: string; count: number }> = [
+        { value: '', label: 'Wszystkie', count: statusCounts.all },
+        { value: 'fetched', label: 'Pobrane', count: statusCounts.fetched },
+        { value: 'in_progress', label: 'W realizacji', count: statusCounts.in_progress },
+        { value: 'done', label: 'Gotowe', count: statusCounts.done },
+    ];
+    const pageStart = totalOrders === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+    const pageEnd = totalOrders === 0 ? 0 : pageStart + orders.length - 1;
+    const visiblePages = getVisiblePageNumbers(currentPage, totalPages);
+
+    const handlePageChange = (page: number) => {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        loadOrders(page);
+    };
 
     return (
         <div className="app-container">
@@ -383,30 +420,18 @@ export default function AdminOrders() {
 
                             {/* Status filter tabs */}
                             <div className="status-tabs">
-                                <button
-                                    className={`status-tab ${statusFilter === '' ? 'active' : ''}`}
-                                    onClick={() => setStatusFilter('')}
-                                >
-                                    Wszystkie
-                                </button>
-                                <button
-                                    className={`status-tab ${statusFilter === 'fetched' ? 'active' : ''}`}
-                                    onClick={() => setStatusFilter('fetched')}
-                                >
-                                    Pobrane
-                                </button>
-                                <button
-                                    className={`status-tab ${statusFilter === 'in_progress' ? 'active' : ''}`}
-                                    onClick={() => setStatusFilter('in_progress')}
-                                >
-                                    W realizacji
-                                </button>
-                                <button
-                                    className={`status-tab ${statusFilter === 'done' ? 'active' : ''}`}
-                                    onClick={() => setStatusFilter('done')}
-                                >
-                                    Gotowe
-                                </button>
+                                {statusTabs.map(tab => (
+                                    <button
+                                        key={tab.value || 'all'}
+                                        className={`status-tab ${statusFilter === tab.value ? 'active' : ''}`}
+                                        onClick={() => setStatusFilter(tab.value)}
+                                    >
+                                        <span className="status-tab-content">
+                                            <span>{tab.label}</span>
+                                            <span className="status-tab-count">{tab.count}</span>
+                                        </span>
+                                    </button>
+                                ))}
                             </div>
 
                             <div className="filters-row">
@@ -477,112 +502,158 @@ export default function AdminOrders() {
 
                             {loading ? (
                                 <p>Ładowanie...</p>
-                            ) : filteredOrders.length === 0 ? (
+                            ) : orders.length === 0 ? (
                                 <p className="text-muted">Brak zamówień</p>
                             ) : (
-                                <div className="orders-table-wrapper">
-                                    <table className="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th className="checkbox-col"></th>
-                                                <th>ID</th>
-                                                <th>ID zewn.</th>
-                                                <th>Klient</th>
-                                                <th className="hide-mobile">Źródło</th>
-                                                <th>Wysyłka</th>
-                                                <th className="hide-mobile">Poz.</th>
-                                                <th>Status</th>
-                                                <th>Akcje</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredOrders.map(order => (
-                                                <React.Fragment key={order.id}>
-                                                    <tr>
-                                                        <td className="checkbox-col">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedOrderIds.has(order.id)}
-                                                                onChange={() => toggleOrderSelection(order.id)}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <Link to={`/admin/orders/${order.id}`} className="order-id-link">
-                                                                #{order.id}
-                                                            </Link>
-                                                        </td>
-                                                        <td>{order.external_id || '-'}</td>
-                                                        <td>{order.fullname || order.company || '-'}</td>
-                                                        <td className="hide-mobile">{order.source || '-'}</td>
-                                                        <td className="editable-date-cell">
-                                                            {editingDateOrderId === order.id ? (
-                                                                <div className="inline-date-edit">
-                                                                    <input
-                                                                        type="date"
-                                                                        value={editingDateValue}
-                                                                        onChange={(e) => setEditingDateValue(e.target.value)}
-                                                                        autoFocus
-                                                                    />
-                                                                    <button className="btn-primary btn-xs" onClick={() => handleInlineDateSave(order.id)}>✓</button>
-                                                                    <button className="btn-secondary btn-xs" onClick={() => setEditingDateOrderId(null)}>×</button>
-                                                                </div>
-                                                            ) : (
-                                                                <span
-                                                                    className="clickable-date"
-                                                                    onClick={() => {
-                                                                        setEditingDateOrderId(order.id);
-                                                                        setEditingDateValue(order.expected_shipment_date || '');
-                                                                    }}
-                                                                >
-                                                                    {formatDate(order.expected_shipment_date)}
+                                <>
+                                    <div className="orders-table-wrapper">
+                                        <table className="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th className="checkbox-col"></th>
+                                                    <th>ID</th>
+                                                    <th>ID zewn.</th>
+                                                    <th>Klient</th>
+                                                    <th className="hide-mobile">Źródło</th>
+                                                    <th>Wysyłka</th>
+                                                    <th className="hide-mobile">Poz.</th>
+                                                    <th>Status</th>
+                                                    <th>Akcje</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {orders.map(order => (
+                                                    <React.Fragment key={order.id}>
+                                                        <tr className="order-main-row">
+                                                            <td className="checkbox-col">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedOrderIds.has(order.id)}
+                                                                    onChange={() => toggleOrderSelection(order.id)}
+                                                                />
+                                                            </td>
+                                                            <td className="order-id-cell">
+                                                                <Link to={`/admin/orders/${order.id}`} className="order-id-link">
+                                                                    #{order.id}
+                                                                </Link>
+                                                            </td>
+                                                            <td className="order-external-id-cell">
+                                                                <span className="order-secondary-text">{order.external_id || '-'}</span>
+                                                            </td>
+                                                            <td className="order-client-cell">
+                                                                <span className="order-primary-text">{order.fullname || order.company || '-'}</span>
+                                                            </td>
+                                                            <td className="hide-mobile order-source-cell">
+                                                                <span className="order-secondary-text">{order.source || '-'}</span>
+                                                            </td>
+                                                            <td className="editable-date-cell order-shipment-cell">
+                                                                {editingDateOrderId === order.id ? (
+                                                                    <div className="inline-date-edit">
+                                                                        <input
+                                                                            type="date"
+                                                                            value={editingDateValue}
+                                                                            onChange={(e) => setEditingDateValue(e.target.value)}
+                                                                            autoFocus
+                                                                        />
+                                                                        <button className="btn-primary btn-xs" onClick={() => handleInlineDateSave(order.id)}>✓</button>
+                                                                        <button className="btn-secondary btn-xs" onClick={() => setEditingDateOrderId(null)}>×</button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span
+                                                                        className="clickable-date"
+                                                                        onClick={() => {
+                                                                            setEditingDateOrderId(order.id);
+                                                                            setEditingDateValue(order.expected_shipment_date || '');
+                                                                        }}
+                                                                    >
+                                                                        {formatDate(order.expected_shipment_date)}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="hide-mobile order-position-count-cell">
+                                                                <span className="order-count-badge">{order.position_count}</span>
+                                                            </td>
+                                                            <td className="order-status-cell">
+                                                                <span className={getStatusBadgeClass(order.status)}>
+                                                                    {ORDER_STATUS_LABELS[order.status]}
                                                                 </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="hide-mobile">{order.position_count}</td>
-                                                        <td>
-                                                            <span className={getStatusBadgeClass(order.status)}>
-                                                                {ORDER_STATUS_LABELS[order.status]}
-                                                            </span>
-                                                        </td>
-                                                        <td className="actions-cell">
-                                                            <button
-                                                                className="btn-danger btn-sm"
-                                                                onClick={() => handleDeleteOrder(order.id)}
-                                                            >
-                                                                ×
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                    {/* Position sub-rows */}
-                                                    {order.positions.map(pos => (
-                                                        <tr key={`pos-${pos.id}`} className="position-subrow">
-                                                            <td></td>
-                                                            <td colSpan={2} className="position-sku-cell">
-                                                                <span className="subrow-marker">↳</span>
-                                                                {pos.product.sku}
                                                             </td>
-                                                            <td colSpan={2}>
-                                                                <div className="action-pills-row">
-                                                                    {(['cutting', 'sewing', 'ironing', 'packing'] as ActionType[]).map(at => {
-                                                                        const done = pos.action_totals[at] || 0;
-                                                                        const isComplete = done >= pos.quantity;
-                                                                        const shortLabel = ACTION_TYPE_LABELS[at].slice(0, 3);
-                                                                        return (
-                                                                            <span key={at} className={`action-pill action-pill-${at} ${isComplete ? 'complete' : ''}`}>
-                                                                                {shortLabel}: {done}/{pos.quantity}
-                                                                            </span>
-                                                                        );
-                                                                    })}
-                                                                </div>
+                                                            <td className="actions-cell order-actions-cell">
+                                                                <button
+                                                                    className="btn-danger btn-sm"
+                                                                    onClick={() => handleDeleteOrder(order.id)}
+                                                                >
+                                                                    ×
+                                                                </button>
                                                             </td>
-                                                            <td colSpan={4}></td>
                                                         </tr>
-                                                    ))}
-                                                </React.Fragment>
+                                                        {order.positions.map(pos => (
+                                                            <tr key={`pos-${pos.id}`} className="position-subrow">
+                                                                <td className="checkbox-col"></td>
+                                                                <td colSpan={8} className="position-subrow-content-cell">
+                                                                    <div className="position-subrow-content">
+                                                                        <div className="position-subrow-main">
+                                                                            <span className="subrow-marker">↳</span>
+                                                                            <span className="position-sku-text">{pos.product.sku}</span>
+                                                                            <span className="position-qty-badge">x{pos.quantity}</span>
+                                                                        </div>
+                                                                        <div className="action-pills-row position-subrow-pills">
+                                                                            {(['cutting', 'sewing', 'ironing', 'packing'] as ActionType[]).map(at => {
+                                                                                const done = pos.action_totals[at] || 0;
+                                                                                const isComplete = done >= pos.quantity;
+                                                                                const shortLabel = ACTION_TYPE_LABELS[at].slice(0, 3);
+                                                                                return (
+                                                                                    <span key={at} className={`action-pill action-pill-${at} ${isComplete ? 'complete' : ''}`}>
+                                                                                        {shortLabel}: {done}/{pos.quantity}
+                                                                                    </span>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </React.Fragment>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div className="pagination-bar">
+                                        <div className="pagination-summary">
+                                            Pokazano {pageStart}-{pageEnd} z {totalOrders} zamówień
+                                        </div>
+                                        <div className="pagination-controls">
+                                            <button
+                                                className="pagination-btn"
+                                                onClick={() => handlePageChange(currentPage - 1)}
+                                                disabled={currentPage === 1}
+                                            >
+                                                Poprzednia
+                                            </button>
+                                            {visiblePages.map(page => (
+                                                typeof page === 'number' ? (
+                                                    <button
+                                                        key={page}
+                                                        className={`pagination-btn pagination-page-btn ${page === currentPage ? 'active' : ''}`}
+                                                        onClick={() => handlePageChange(page)}
+                                                    >
+                                                        {page}
+                                                    </button>
+                                                ) : (
+                                                    <span key={page} className="pagination-ellipsis">…</span>
+                                                )
                                             ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            <button
+                                                className="pagination-btn"
+                                                onClick={() => handlePageChange(currentPage + 1)}
+                                                disabled={currentPage === totalPages}
+                                            >
+                                                Następna
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
                             )}
                         </div>
 

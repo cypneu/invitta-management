@@ -1,6 +1,7 @@
 """Orders router - Admin CRUD for orders with positions and status management."""
 
 from datetime import date
+from math import ceil
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,7 +20,9 @@ from ..schemas import (
     OrderPositionResponse,
     OrderStatus as OrderStatusSchema,
     OrderWithPositionsListResponse,
+    PaginatedOrderWithPositionsListResponse,
     OrderPositionBrief,
+    OrderStatusCountsResponse,
     ProductResponse,
 )
 
@@ -49,26 +52,14 @@ class ShipmentDateUpdate(BaseModel):
     expected_shipment_date: date | None
 
 
-@router.get("/", response_model=list[OrderWithPositionsListResponse])
-def list_orders(
+def apply_order_filters(
+    query,
     source: Optional[str] = None,
     status: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     search: Optional[str] = None,
-    db: Session = Depends(get_db),
 ):
-    """List all orders with positions and action totals in single query."""
-    from .actions import get_action_totals
-    
-    # Build query with eager loading of positions, products, and actions
-    query = db.query(Order).options(
-        joinedload(Order.positions)
-        .joinedload(OrderPosition.product),
-        joinedload(Order.positions)
-        .joinedload(OrderPosition.actions),
-    )
-
     if source:
         query = query.filter(Order.source == source)
     if status:
@@ -76,7 +67,7 @@ def list_orders(
             status_enum = OrderStatus(status)
             query = query.filter(Order.status == status_enum)
         except ValueError:
-            pass  # Invalid status, ignore filter
+            pass
     if date_from:
         query = query.filter(Order.expected_shipment_date >= date_from)
     if date_to:
@@ -89,39 +80,188 @@ def list_orders(
             | (Order.external_id.ilike(search_term))
             | (cast(Order.id, String).ilike(search_term))
         )
+    return query
 
-    orders = query.order_by(
-        # Orders with earlier shipment dates first
-        func.coalesce(Order.expected_shipment_date, '9999-12-31').asc(),
-        Order.id.desc()
-    ).all()
 
-    result = []
-    for order in orders:
-        positions_brief = []
-        for pos in order.positions:
-            positions_brief.append(OrderPositionBrief(
+def order_sorting():
+    return (
+        func.coalesce(Order.expected_shipment_date, "9999-12-31").asc(),
+        Order.id.desc(),
+    )
+
+
+def serialize_order_list_item(order: Order) -> OrderWithPositionsListResponse:
+    from .actions import get_action_totals
+
+    positions_brief = []
+    for pos in order.positions:
+        positions_brief.append(
+            OrderPositionBrief(
                 id=pos.id,
                 product_id=pos.product_id,
                 product=ProductResponse.model_validate(pos.product),
                 quantity=pos.quantity,
                 action_totals=get_action_totals(pos),
-            ))
-        
-        result.append(OrderWithPositionsListResponse(
-            id=order.id,
-            integration=order.integration,
-            external_id=order.external_id or (str(order.baselinker_id) if order.baselinker_id is not None else None),
-            source=order.source,
-            expected_shipment_date=order.expected_shipment_date,
-            fullname=order.fullname,
-            company=order.company,
-            status=order.status,
-            position_count=len(order.positions),
-            positions=positions_brief,
-        ))
-    
-    return result
+            )
+        )
+
+    return OrderWithPositionsListResponse(
+        id=order.id,
+        integration=order.integration,
+        external_id=order.external_id
+        or (str(order.baselinker_id) if order.baselinker_id is not None else None),
+        source=order.source,
+        expected_shipment_date=order.expected_shipment_date,
+        fullname=order.fullname,
+        company=order.company,
+        status=order.status,
+        position_count=len(order.positions),
+        positions=positions_brief,
+    )
+
+
+def get_order_status_counts(
+    db: Session,
+    source: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    search: Optional[str] = None,
+) -> OrderStatusCountsResponse:
+    counts = {
+        "all": 0,
+        "fetched": 0,
+        "in_progress": 0,
+        "done": 0,
+        "cancelled": 0,
+    }
+
+    rows = (
+        apply_order_filters(
+            db.query(Order.status, func.count(Order.id)),
+            source=source,
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+        )
+        .group_by(Order.status)
+        .all()
+    )
+
+    for status_value, count in rows:
+        counts[str(status_value.value)] = int(count)
+        counts["all"] += int(count)
+
+    return OrderStatusCountsResponse(**counts)
+
+
+@router.get("/", response_model=list[OrderWithPositionsListResponse])
+def list_orders(
+    source: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """List all orders with positions and action totals in single query."""
+    query = apply_order_filters(
+        db.query(Order).options(
+            joinedload(Order.positions).joinedload(OrderPosition.product),
+            joinedload(Order.positions).joinedload(OrderPosition.actions),
+        ),
+        source=source,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
+    )
+
+    orders = query.order_by(*order_sorting()).all()
+    return [serialize_order_list_item(order) for order in orders]
+
+
+@router.get("/paginated", response_model=PaginatedOrderWithPositionsListResponse)
+def list_orders_paginated(
+    source: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """List orders for the admin table with backend pagination."""
+    filtered_query = apply_order_filters(
+        db.query(Order),
+        source=source,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
+    )
+
+    total = filtered_query.count()
+    total_pages = max(1, ceil(total / page_size)) if total else 1
+    current_page = min(page, total_pages)
+    offset = (current_page - 1) * page_size
+
+    page_order_ids = [
+        order_id
+        for order_id, in filtered_query.order_by(*order_sorting())
+        .with_entities(Order.id)
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    ]
+
+    items: list[OrderWithPositionsListResponse] = []
+    if page_order_ids:
+        orders = (
+            db.query(Order)
+            .options(
+                joinedload(Order.positions).joinedload(OrderPosition.product),
+                joinedload(Order.positions).joinedload(OrderPosition.actions),
+            )
+            .filter(Order.id.in_(page_order_ids))
+            .all()
+        )
+        orders_by_id = {order.id: order for order in orders}
+        items = [
+            serialize_order_list_item(orders_by_id[order_id])
+            for order_id in page_order_ids
+            if order_id in orders_by_id
+        ]
+
+    status_counts = get_order_status_counts(
+        db,
+        source=source,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
+    )
+
+    return PaginatedOrderWithPositionsListResponse(
+        items=items,
+        total=total,
+        page=current_page,
+        page_size=page_size,
+        total_pages=total_pages,
+        status_counts=status_counts,
+    )
+
+
+@router.get("/sources", response_model=list[str])
+def list_order_sources(db: Session = Depends(get_db)):
+    """List distinct order sources for filters."""
+    rows = (
+        db.query(Order.source)
+        .filter(Order.source.isnot(None))
+        .distinct()
+        .order_by(Order.source.asc())
+        .all()
+    )
+    return [source for source, in rows if source]
 
 
 @router.get("/for-worker", response_model=list[OrderWithPositionsListResponse])
