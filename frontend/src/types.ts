@@ -4,6 +4,7 @@ export type ActionType = 'cutting' | 'sewing' | 'ironing' | 'packing';
 export type ShapeType = 'rectangular' | 'round' | 'oval';
 export type OrderStatus = 'fetched' | 'in_progress' | 'done' | 'cancelled';
 export type EdgeType = 'U3' | 'U4' | 'U5' | 'O1' | 'O3' | 'O5' | 'OGK' | 'LA';
+export type SyncIntegration = 'baselinker' | 'invitta';
 
 export interface User {
     id: number;
@@ -73,7 +74,8 @@ export interface OrderPosition {
 
 export interface Order {
     id: number;
-    baselinker_id: number | null;
+    integration: string | null;
+    external_id: string | null;
     source: string | null;
     expected_shipment_date: string | null;
     fullname: string | null;
@@ -92,7 +94,8 @@ export interface OrderPositionBrief {
 
 export interface OrderListItem {
     id: number;
-    baselinker_id: number | null;
+    integration: string | null;
+    external_id: string | null;
     source: string | null;
     expected_shipment_date: string | null;
     fullname: string | null;
@@ -140,10 +143,28 @@ export interface ActionCreate {
     quantity: number;
 }
 
-export interface SyncStatus {
+export interface SyncSourceStatus {
+    integration: SyncIntegration;
+    label: string;
+    configured: boolean;
     last_sync_timestamp: number;
     last_sync_at: string | null;
     shipment_date_field_id: number | null;
+}
+
+export interface SyncStatus {
+    last_sync_timestamp: number;
+    last_sync_at: string | null;
+    sources: SyncSourceStatus[];
+}
+
+export interface SyncSourceResult {
+    integration: SyncIntegration;
+    label: string;
+    success: boolean;
+    orders_synced: number;
+    products_created: number;
+    message: string;
 }
 
 export interface SyncResult {
@@ -151,6 +172,7 @@ export interface SyncResult {
     orders_synced: number;
     products_created: number;
     message: string;
+    sources: SyncSourceResult[];
 }
 
 export interface OrderFilters {
@@ -173,4 +195,9 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
     in_progress: 'W realizacji',
     done: 'Gotowe',
     cancelled: 'Anulowane',
+};
+
+export const SYNC_LABELS: Record<SyncIntegration, string> = {
+    baselinker: 'Baselinker',
+    invitta: 'Invitta',
 };

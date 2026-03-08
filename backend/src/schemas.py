@@ -91,9 +91,9 @@ class ProductResponse(BaseModel):
 
 
 class ProductCreate(BaseModel):
-    sku: str = Field(..., min_length=1, max_length=100)
-    fabric: str = Field(..., min_length=1, max_length=100)
-    pattern: str = Field(..., min_length=1, max_length=100)
+    sku: str = Field(..., min_length=1, max_length=512)
+    fabric: str = Field(..., min_length=1, max_length=255)
+    pattern: str = Field(..., min_length=1, max_length=512)
     shape: ShapeType
     width: int | None = Field(None, gt=0)
     height: int | None = Field(None, gt=0)
@@ -102,9 +102,9 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
-    sku: str | None = Field(None, min_length=1, max_length=100)
-    fabric: str | None = Field(None, min_length=1, max_length=100)
-    pattern: str | None = Field(None, min_length=1, max_length=100)
+    sku: str | None = Field(None, min_length=1, max_length=512)
+    fabric: str | None = Field(None, min_length=1, max_length=255)
+    pattern: str | None = Field(None, min_length=1, max_length=512)
     shape: ShapeType | None = None
     width: int | None = Field(None, gt=0)
     height: int | None = Field(None, gt=0)
@@ -144,7 +144,8 @@ class OrderUpdate(BaseModel):
 
 class OrderResponse(BaseModel):
     id: int
-    baselinker_id: int | None
+    integration: str | None
+    external_id: str | None
     source: str | None
     expected_shipment_date: date | None
     fullname: str | None
@@ -159,7 +160,8 @@ class OrderResponse(BaseModel):
 class OrderListResponse(BaseModel):
     """Lightweight order response without nested positions."""
     id: int
-    baselinker_id: int | None
+    integration: str | None
+    external_id: str | None
     source: str | None
     expected_shipment_date: date | None
     fullname: str | None
@@ -186,7 +188,8 @@ class OrderPositionBrief(BaseModel):
 class OrderWithPositionsListResponse(BaseModel):
     """Order with embedded positions for efficient list view."""
     id: int
-    baselinker_id: int | None
+    integration: str | None
+    external_id: str | None
     source: str | None
     expected_shipment_date: date | None
     fullname: str | None
@@ -233,10 +236,28 @@ class OrderPositionWithActionsResponse(BaseModel):
 
 
 # Sync schemas
-class SyncStatusResponse(BaseModel):
+class SyncSourceStatusResponse(BaseModel):
+    integration: str
+    label: str
+    configured: bool
     last_sync_timestamp: int
     last_sync_at: datetime | None
     shipment_date_field_id: int | None
+
+
+class SyncStatusResponse(BaseModel):
+    last_sync_timestamp: int
+    last_sync_at: datetime | None
+    sources: list[SyncSourceStatusResponse] = []
+
+
+class SyncSourceResultResponse(BaseModel):
+    integration: str
+    label: str
+    success: bool
+    orders_synced: int
+    products_created: int
+    message: str
 
 
 class SyncTriggerResponse(BaseModel):
@@ -244,6 +265,7 @@ class SyncTriggerResponse(BaseModel):
     orders_synced: int
     products_created: int
     message: str
+    sources: list[SyncSourceResultResponse] = []
 
 
 # Cost Config schemas

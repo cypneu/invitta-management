@@ -45,10 +45,10 @@ class EdgeType(str, PyEnum):
 
 
 class OrderStatus(str, PyEnum):
-    fetched = "fetched"  # Pobrane - just synced from Baselinker
-    in_progress = "in_progress"  # W realizacji - being worked on
-    done = "done"  # Gotowe - all positions complete
-    cancelled = "cancelled"  # Anulowane - cancelled order
+    fetched = "fetched"
+    in_progress = "in_progress"
+    done = "done"
+    cancelled = "cancelled"
 
 
 class User(Base):
@@ -77,9 +77,9 @@ class Product(Base):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True, index=True)
-    sku = Column(String(100), unique=True, nullable=False, index=True)
-    fabric = Column(String(50), nullable=False)
-    pattern = Column(String(50), nullable=False)
+    sku = Column(String(512), unique=True, nullable=False, index=True)
+    fabric = Column(String(255), nullable=False)
+    pattern = Column(String(512), nullable=False)
     shape = Column(Enum(ShapeType), nullable=False)
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
@@ -100,11 +100,17 @@ class Order(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     baselinker_id = Column(BigInteger, unique=True, nullable=True, index=True)
+    integration = Column(String(50), nullable=True, index=True)
+    external_id = Column(String(100), nullable=True, index=True)
     source = Column(String(50), nullable=True)
     expected_shipment_date = Column(Date, nullable=True, index=True)
     fullname = Column(String(200), nullable=True)
     company = Column(String(200), nullable=True)
     status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.fetched, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("integration", "external_id", name="uq_orders_integration_external_id"),
+    )
 
     positions = relationship("OrderPosition", back_populates="order", cascade="all, delete-orphan")
 
@@ -152,18 +158,17 @@ class SyncState(Base):
     __tablename__ = "sync_state"
 
     id = Column(Integer, primary_key=True, index=True)
+    integration = Column(String(50), unique=True, nullable=False)
     last_sync_timestamp = Column(BigInteger, nullable=False, default=0)
     shipment_date_field_id = Column(Integer, nullable=True)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class CostConfig(Base):
-    """Singleton table for production cost configuration parameters."""
     __tablename__ = "cost_config"
 
     id = Column(Integer, primary_key=True, index=True)
-    
-    # Base factors
+
     lag_factor = Column(Float, nullable=False, default=0.35)
     cutting_factor = Column(Float, nullable=False, default=1.86)
     ironing_factor = Column(Float, nullable=False, default=0.65)
@@ -171,12 +176,10 @@ class CostConfig(Base):
     packing_factor = Column(Float, nullable=False, default=0.2045)
     depreciation_factor = Column(Float, nullable=False, default=0.062)
     packaging_materials_price = Column(Float, nullable=False, default=3.2)
-    
-    # Sewing factors per edge_type (stored as JSON)
+
     corner_sewing_factors = Column(JSON, nullable=False, default=dict)
     sewing_factors = Column(JSON, nullable=False, default=dict)
-    
-    # Material waste per edge_type (stored as JSON - values in cm)
+
     material_waste = Column(JSON, nullable=False, default=dict)
-    
+
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

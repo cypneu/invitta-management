@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import cast, func, String
 
 from ..database import get_db
 from ..models import Order, OrderPosition, Product, User, OrderStatus
@@ -84,7 +84,10 @@ def list_orders(
     if search:
         search_term = f"%{search}%"
         query = query.filter(
-            (Order.fullname.ilike(search_term)) | (Order.company.ilike(search_term))
+            (Order.fullname.ilike(search_term))
+            | (Order.company.ilike(search_term))
+            | (Order.external_id.ilike(search_term))
+            | (cast(Order.id, String).ilike(search_term))
         )
 
     orders = query.order_by(
@@ -107,7 +110,8 @@ def list_orders(
         
         result.append(OrderWithPositionsListResponse(
             id=order.id,
-            baselinker_id=order.baselinker_id,
+            integration=order.integration,
+            external_id=order.external_id or (str(order.baselinker_id) if order.baselinker_id is not None else None),
             source=order.source,
             expected_shipment_date=order.expected_shipment_date,
             fullname=order.fullname,
@@ -165,7 +169,8 @@ def list_orders_for_worker(
         
         result.append(OrderWithPositionsListResponse(
             id=order.id,
-            baselinker_id=order.baselinker_id,
+            integration=order.integration,
+            external_id=order.external_id or (str(order.baselinker_id) if order.baselinker_id is not None else None),
             source=order.source,
             expected_shipment_date=order.expected_shipment_date,
             fullname=order.fullname,

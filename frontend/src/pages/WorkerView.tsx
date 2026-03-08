@@ -247,8 +247,8 @@ export default function WorkerView() {
             const client = (o.fullname || o.company || '').toLowerCase();
             const date = formatDate(o.expected_shipment_date).toLowerCase();
             const skus = o.positions.map(p => p.product.sku.toLowerCase());
-            const blId = o.baselinker_id ? String(o.baselinker_id) : '';
-            return client.includes(q) || date.includes(q) || skus.some(sku => sku.includes(q)) || blId.includes(q);
+            const externalId = o.external_id || '';
+            return client.includes(q) || date.includes(q) || skus.some(sku => sku.includes(q)) || externalId.includes(q);
         });
     };
 
@@ -259,7 +259,7 @@ export default function WorkerView() {
     const allowedTypes = user?.allowed_action_types || [];
 
     function renderOrderCard(order: OrderWithPositions) {
-        const displayId = order.baselinker_id || order.id;
+        const displayId = order.external_id || order.id;
 
         return (
             <div key={order.id} className="order-card">

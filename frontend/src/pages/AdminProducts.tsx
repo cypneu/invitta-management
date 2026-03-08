@@ -183,7 +183,7 @@ export default function AdminProducts() {
                     ) : products.length === 0 ? (
                         <div className="empty-state">
                             <p>Brak produktów</p>
-                            <p className="text-muted">Produkty są automatycznie tworzone podczas synchronizacji z Baselinker lub możesz je dodać ręcznie.</p>
+                            <p className="text-muted">Produkty są automatycznie tworzone podczas synchronizacji z Baselinker i Invitta lub możesz je dodać ręcznie.</p>
                         </div>
                     ) : (
                         <div className="table-wrapper">

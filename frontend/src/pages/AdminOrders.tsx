@@ -3,7 +3,7 @@ import { useNavigate, Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getOrders, getOrder, createOrder, deleteOrder, updateOrder, getProducts, getOrderPositions, getPositionActions, addPosition, deletePosition, updateOrderStatus, bulkUpdateOrderStatus, updateAction, deleteAction, updateOrderShipmentDate } from '../api';
 import type { OrderListItem, Order, Product, OrderPositionWithActions, ActionType, OrderStatus, Action } from '../types';
-import { ACTION_TYPE_LABELS, ORDER_STATUS_LABELS } from '../types';
+import { ACTION_TYPE_LABELS, ORDER_STATUS_LABELS, SYNC_LABELS } from '../types';
 
 // Helper to format date as DD-MM-YYYY
 function formatDate(dateStr: string | null): string {
@@ -18,6 +18,11 @@ function formatDate(dateStr: string | null): string {
 function formatTime(timestamp: string): string {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatIntegration(integration: string | null): string {
+    if (!integration) return '-';
+    return SYNC_LABELS[integration as keyof typeof SYNC_LABELS] || integration;
 }
 
 export default function AdminOrders() {
@@ -154,9 +159,9 @@ export default function AdminOrders() {
         const q = search.toLowerCase();
         return orders.filter(o => {
             const client = (o.fullname || o.company || '').toLowerCase();
-            const blId = o.baselinker_id ? String(o.baselinker_id) : '';
+            const externalId = o.external_id || '';
             const id = String(o.id);
-            return client.includes(q) || blId.includes(q) || id.includes(q);
+            return client.includes(q) || externalId.includes(q) || id.includes(q);
         });
     }, [orders, search]);
 
@@ -407,7 +412,7 @@ export default function AdminOrders() {
                             <div className="filters-row">
                                 <input
                                     type="text"
-                                    placeholder="Szukaj po kliencie, ID, Baselinker ID..."
+                                    placeholder="Szukaj po kliencie, ID lub ID zewnętrznym..."
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
                                     className="search-input-admin"
@@ -481,7 +486,7 @@ export default function AdminOrders() {
                                             <tr>
                                                 <th className="checkbox-col"></th>
                                                 <th>ID</th>
-                                                <th>BL ID</th>
+                                                <th>ID zewn.</th>
                                                 <th>Klient</th>
                                                 <th className="hide-mobile">Źródło</th>
                                                 <th>Wysyłka</th>
@@ -506,7 +511,7 @@ export default function AdminOrders() {
                                                                 #{order.id}
                                                             </Link>
                                                         </td>
-                                                        <td>{order.baselinker_id || '-'}</td>
+                                                        <td>{order.external_id || '-'}</td>
                                                         <td>{order.fullname || order.company || '-'}</td>
                                                         <td className="hide-mobile">{order.source || '-'}</td>
                                                         <td className="editable-date-cell">
@@ -660,6 +665,7 @@ export default function AdminOrders() {
                             <div className="order-meta">
                                 <p><strong>Klient:</strong> {selectedOrder.fullname || '-'}</p>
                                 <p><strong>Firma:</strong> {selectedOrder.company || '-'}</p>
+                                <p><strong>Integracja:</strong> {formatIntegration(selectedOrder.integration)}</p>
                                 <p>
                                     <strong>Planowana wysyłka:</strong>{' '}
                                     {editingShipmentDate ? (
@@ -684,8 +690,8 @@ export default function AdminOrders() {
                                         </span>
                                     )}
                                 </p>
-                                {selectedOrder.baselinker_id && (
-                                    <p><strong>Baselinker ID:</strong> {selectedOrder.baselinker_id}</p>
+                                {selectedOrder.external_id && (
+                                    <p><strong>ID zewnętrzne:</strong> {selectedOrder.external_id}</p>
                                 )}
                             </div>
                         )}

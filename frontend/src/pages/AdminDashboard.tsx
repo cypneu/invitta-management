@@ -78,6 +78,7 @@ export default function AdminDashboard() {
         <Link to="/admin/products" className="nav-link">Produkty</Link>
         <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
         <Link to="/admin/stats" className="nav-link">Statystyki</Link>
+        <Link to="/admin/sync" className="nav-link">Synchronizacja</Link>
       </nav>
 
       <main className="main-content">

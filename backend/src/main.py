@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import SessionLocal
 from .routers import users, orders, products, actions, sync, stats, costs
-from .services.baselinker import sync_orders
+from .services.sync import enabled_sync_provider_labels, has_sync_providers, sync_all_orders
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,11 +18,10 @@ scheduler = BackgroundScheduler()
 
 
 def run_sync_job():
-    """Background job to sync orders from Baselinker."""
-    logger.info("Starting scheduled Baselinker sync...")
+    logger.info("Starting scheduled order sync...")
     db = SessionLocal()
     try:
-        result = sync_orders(db)
+        result = sync_all_orders(db)
         logger.info(f"Scheduled sync complete: {result}")
     except Exception as e:
         logger.exception(f"Scheduled sync failed: {e}")
@@ -32,24 +31,25 @@ def run_sync_job():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan handler for startup/shutdown."""
-    # Startup
-    if settings.baselinker_api_token:
+    if has_sync_providers():
         scheduler.add_job(
             run_sync_job,
             "interval",
             minutes=settings.sync_interval_minutes,
-            id="baselinker_sync",
+            id="order_sync",
             replace_existing=True,
         )
         scheduler.start()
-        logger.info(f"Baselinker sync scheduler started (every {settings.sync_interval_minutes} minutes)")
+        logger.info(
+            "Order sync scheduler started for %s (every %s minutes)",
+            ", ".join(enabled_sync_provider_labels()),
+            settings.sync_interval_minutes,
+        )
     else:
-        logger.warning("BASELINKER_API_TOKEN not set, automatic sync disabled")
+        logger.warning("No sync provider token configured, automatic sync disabled")
 
     yield
 
-    # Shutdown
     if scheduler.running:
         scheduler.shutdown()
         logger.info("Scheduler shut down")

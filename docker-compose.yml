@@ -32,6 +32,7 @@ services:
       DATABASE_URL: mysql+pymysql://produser:prodpass@db:3306/production_tracker
       ADMIN_CODE: ${ADMIN_CODE:-TestAdmin123}
       BASELINKER_API_TOKEN: ${BASELINKER_API_TOKEN:-}
+      INVITTA_API_TOKEN: ${INVITTA_API_TOKEN:-}
     ports:
       - "8000:8000"
     volumes:
