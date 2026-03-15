@@ -8,7 +8,7 @@ import type {
     PaginatedProductFilters, PaginatedProductListResponse
 } from './types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // Auth API
 export async function login(code: string): Promise<User> {

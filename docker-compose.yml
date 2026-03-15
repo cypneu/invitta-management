@@ -50,8 +50,6 @@ services:
     volumes:
       - ./frontend/src:/app/src:ro
       - ./frontend/index.html:/app/index.html:ro
-    environment:
-      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
 
