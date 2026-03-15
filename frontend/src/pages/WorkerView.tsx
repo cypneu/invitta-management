@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import WorkerTopBar from '../WorkerTopBar';
 import type { OrderListItem, OrderPositionWithActions, ActionType, Action } from '../types';
 import { ACTION_TYPE_LABELS } from '../types';
 import { getOrdersForWorker, getOrderPositions, getPositionActions, addAction, updateAction, deleteAction } from '../api';
@@ -314,23 +315,11 @@ export default function WorkerView() {
 
     return (
         <div className="app-container">
-            <header className="header">
-                <div className="header-content">
-                    <h1 className="hide-mobile">Panel Pracownika</h1>
-                    <div className="header-user">
-                        <span>{user?.name}</span>
-                        <button onClick={handleLogout} className="btn-secondary btn-sm">Wyloguj</button>
-                    </div>
-                </div>
-            </header>
-
-            <nav className="admin-nav">
-                <Link to="/worker" className="nav-link nav-link-with-count active">
-                    <span>Zamówienia</span>
-                    <span className="nav-link-count">{activeOrdersCount}</span>
-                </Link>
-                <Link to="/worker/entries" className="nav-link">Moje wpisy</Link>
-            </nav>
+            <WorkerTopBar
+                activeOrdersCount={activeOrdersCount}
+                userName={user?.name}
+                onLogout={handleLogout}
+            />
 
             {/* Search bar */}
             <div className="worker-search-bar">

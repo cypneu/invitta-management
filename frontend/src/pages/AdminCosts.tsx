@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AdminTopBar from '../AdminTopBar';
 import {
   getCostConfig,
   updateCostConfig,
@@ -154,23 +155,7 @@ export default function AdminCosts() {
 
   return (
     <div className="app-container">
-      <header className="header">
-        <div className="header-content">
-          <h1>Statystyki produkcji</h1>
-          <div className="header-user">
-            <span>{user?.name}</span>
-            <button onClick={handleLogout} className="btn-secondary btn-sm">Wyloguj</button>
-          </div>
-        </div>
-      </header>
-
-      <nav className="admin-nav">
-        <Link to="/admin" className="nav-link">Dashboard</Link>
-        <Link to="/admin/orders" className="nav-link">Zamówienia</Link>
-        <Link to="/admin/products" className="nav-link">Produkty</Link>
-        <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
-        <Link to="/admin/stats" className="nav-link active">Statystyki</Link>
-      </nav>
+      <AdminTopBar userName={user?.name} onLogout={handleLogout} />
 
       <main className="main-content">
         {error && <div className="error-message" onClick={() => setError(null)}>{error}</div>}

@@ -7,7 +7,6 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminOrders from './pages/AdminOrders';
 import AdminProducts from './pages/AdminProducts';
 import AdminWorkers from './pages/AdminWorkers';
-import AdminSync from './pages/AdminSync';
 import AdminCosts from './pages/AdminCosts';
 import type { ReactNode } from 'react';
 
@@ -74,9 +73,7 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
       <Route path="/admin/sync" element={
-        <ProtectedRoute requiredRole="admin">
-          <AdminSync />
-        </ProtectedRoute>
+        <Navigate to="/admin" replace />
       } />
       <Route path="/admin/stats" element={
         <ProtectedRoute requiredRole="admin">

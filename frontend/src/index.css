@@ -791,6 +791,43 @@ input::placeholder {
   gap: 1rem;
 }
 
+/* Admin top bar */
+.admin-topbar {
+  padding: 0.75rem 2rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-topbar-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.admin-topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.admin-topbar-nav .nav-link {
+  padding: 0.625rem 1rem;
+}
+
+.worker-topbar-name {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.05;
+  text-align: left;
+}
+
 /* Admin navigation */
 .admin-nav {
   display: flex;
@@ -1262,6 +1299,75 @@ code {
     padding: 1rem;
   }
 
+  .admin-topbar {
+    padding: 0.5rem 1rem;
+  }
+
+  .admin-topbar-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-topbar-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .worker-topbar .admin-topbar-content {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+  }
+
+  .worker-topbar .admin-topbar-nav {
+    flex: 0 1 auto;
+    overflow: visible;
+    padding-bottom: 0;
+    gap: 0.15rem;
+  }
+
+  .worker-topbar .nav-link {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.74rem;
+    white-space: nowrap;
+  }
+
+  .worker-topbar .nav-link-count {
+    min-width: 1.15rem;
+    padding: 0.05rem 0.3rem;
+    font-size: 0.66rem;
+  }
+
+  .worker-topbar-user {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: 0.75rem;
+    gap: 0.35rem;
+    justify-content: flex-end;
+  }
+
+  .worker-topbar-name {
+    max-width: 5.25rem;
+    overflow: hidden;
+    font-size: 0.74rem;
+  }
+
+  .worker-topbar-name span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .worker-topbar .btn-secondary.btn-sm {
+    padding: 0.35rem 0.45rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
   .admin-nav {
     padding: 0.5rem 1rem;
     overflow-x: auto;
@@ -1674,12 +1780,14 @@ code {
 }
 
 .order-id {
-  font-weight: 700;
-  font-size: 1rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
 .order-client {
-  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-text);
 }
 
 .order-date {
@@ -1828,6 +1936,10 @@ code {
     flex-direction: row;
     gap: 0.5rem;
     justify-content: center;
+  }
+
+  .admin-topbar-nav {
+    justify-content: flex-start;
   }
 
   .admin-nav {
@@ -1994,7 +2106,11 @@ code {
   }
 
   .order-id {
-    font-size: 0.9rem;
+    font-size: 0.78rem;
+  }
+
+  .order-client {
+    font-size: 0.95rem;
   }
 
   .status-badge {
@@ -2336,6 +2452,7 @@ code {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   margin: 0.25rem 0;
   background: var(--color-bg);

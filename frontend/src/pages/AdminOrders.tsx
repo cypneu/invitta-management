@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AdminTopBar from '../AdminTopBar';
 import { getOrdersPaginated, getOrderSources, getOrder, createOrder, deleteOrder, updateOrder, getProducts, getOrderPositions, getPositionActions, addPosition, deletePosition, updateOrderStatus, bulkUpdateOrderStatus, updateAction, deleteAction, updateOrderShipmentDate } from '../api';
 import type { OrderListItem, Order, Product, OrderPositionWithActions, ActionType, OrderStatus, Action, OrderStatusCounts } from '../types';
 import { ACTION_TYPE_LABELS, ORDER_STATUS_LABELS, SYNC_LABELS } from '../types';
@@ -385,23 +386,7 @@ export default function AdminOrders() {
 
     return (
         <div className="app-container">
-            <header className="header">
-                <div className="header-content">
-                    <h1>{orderId ? `Zamówienie #${orderId}` : 'Zamówienia'}</h1>
-                    <div className="header-user">
-                        <span>{user?.name}</span>
-                        <button onClick={handleLogout} className="btn-secondary btn-sm">Wyloguj</button>
-                    </div>
-                </div>
-            </header>
-
-            <nav className="admin-nav">
-                <Link to="/admin" className="nav-link">Dashboard</Link>
-                <Link to="/admin/orders" className="nav-link active">Zamówienia</Link>
-                <Link to="/admin/products" className="nav-link">Produkty</Link>
-                <Link to="/admin/workers" className="nav-link">Pracownicy</Link>
-                <Link to="/admin/stats" className="nav-link">Statystyki</Link>
-            </nav>
+            <AdminTopBar userName={user?.name} onLogout={handleLogout} />
 
             <main className="main-content">
                 {error && <div className="error-message" onClick={() => setError('')}>{error}</div>}

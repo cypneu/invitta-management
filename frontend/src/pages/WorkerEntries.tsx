@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import WorkerTopBar from '../WorkerTopBar';
 import { getActionHistoryPaginated, getOrdersForWorker, updateAction, deleteAction, type ActionHistoryItem } from '../api';
 import { ACTION_TYPE_LABELS } from '../types';
 
@@ -178,23 +179,11 @@ export default function WorkerEntries() {
 
     return (
         <div className="app-container">
-            <header className="header">
-                <div className="header-content">
-                    <h1 className="hide-mobile">Moje wpisy</h1>
-                    <div className="header-user">
-                        <span>{user?.name}</span>
-                        <button onClick={handleLogout} className="btn-secondary btn-sm">Wyloguj</button>
-                    </div>
-                </div>
-            </header>
-
-            <nav className="admin-nav">
-                <Link to="/worker" className="nav-link nav-link-with-count">
-                    <span>Zamówienia</span>
-                    <span className="nav-link-count">{activeOrdersCount}</span>
-                </Link>
-                <Link to="/worker/entries" className="nav-link active">Moje wpisy</Link>
-            </nav>
+            <WorkerTopBar
+                activeOrdersCount={activeOrdersCount}
+                userName={user?.name}
+                onLogout={handleLogout}
+            />
 
             <main className="main-content">
                 {error && <div className="error-message" onClick={() => setError(null)}>{error}</div>}
