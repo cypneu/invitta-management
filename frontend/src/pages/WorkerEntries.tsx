@@ -251,7 +251,7 @@ export default function WorkerEntries() {
                                                                         min="1"
                                                                         value={editQuantity}
                                                                         onChange={(e) => setEditQuantity(e.target.value)}
-                                                                        className="qty-input-sm"
+                                                                        className="qty-input-small"
                                                                         autoFocus
                                                                     />
                                                                 </span>
