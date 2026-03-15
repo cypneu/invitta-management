@@ -10,6 +10,7 @@ from sqlalchemy import func
 
 from ..database import get_db
 from ..models import OrderPosition, OrderPositionAction, User, ActionType, Order, OrderStatus
+from ..services.costs import calculate_action_cost, get_or_create_config
 from ..schemas import (
     ActionCreate,
     ActionResponse,
@@ -80,6 +81,17 @@ def update_order_status_if_needed(db: Session, order: Order) -> None:
         order.status = OrderStatus.in_progress
 
 
+def calculate_cost_snapshot(
+    db: Session,
+    action_type: ActionType,
+    position: OrderPosition,
+    quantity: int,
+) -> float:
+    """Calculate the persisted cost snapshot for an action entry."""
+    config = get_or_create_config(db)
+    return calculate_action_cost(action_type, position.product, quantity, config)
+
+
 @router.post("/order-positions/{position_id}/actions", response_model=ActionResponse)
 def add_action(
     position_id: int,
@@ -131,13 +143,8 @@ def add_action(
             detail=f"Total quantity ({current_total + action_data.quantity}) would exceed position quantity ({position.quantity})",
         )
 
-    # Calculate cost for this action
-    from ..services.costs import calculate_action_cost, get_or_create_config
-    from ..models import CostConfig
-    
-    config = get_or_create_config(db)
-    product = position.product
-    cost = calculate_action_cost(action_data.action_type, product, action_data.quantity, config)
+    # Store the cost as a snapshot based on the current configuration.
+    cost = calculate_cost_snapshot(db, action_data.action_type, position, action_data.quantity)
 
     # Create the action with cost snapshot
     action = OrderPositionAction(
@@ -242,6 +249,7 @@ def update_action(
 
     # Update the action
     action.quantity = action_data.quantity
+    action.cost = calculate_cost_snapshot(db, action.action_type, position, action_data.quantity)
     db.flush()
 
     # Reload order with positions to recalculate status
@@ -263,6 +271,7 @@ def update_action(
         order_position_id=action.order_position_id,
         action_type=action.action_type,
         quantity=action.quantity,
+        cost=action.cost,
         actor_id=action.actor_id,
         actor_name=user.name,
         timestamp=action.timestamp,
@@ -711,6 +720,7 @@ def update_action(
         )
     
     action.quantity = action_data.quantity
+    action.cost = calculate_cost_snapshot(db, action.action_type, position, action_data.quantity)
     
     # Update order status if needed
     order = position.order
@@ -718,7 +728,12 @@ def update_action(
         update_order_status_if_needed(db, order)
     
     db.commit()
-    return {"message": "Action updated", "id": action_id, "quantity": action_data.quantity}
+    return {
+        "message": "Action updated",
+        "id": action_id,
+        "quantity": action_data.quantity,
+        "cost": action.cost,
+    }
 
 
 @router.delete("/actions/{action_id}")
