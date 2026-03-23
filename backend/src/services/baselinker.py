@@ -31,7 +31,7 @@ class BaselinkerClient:
         response.raise_for_status()
         data = response.json()
         if data.get("status") != "SUCCESS":
-            raise RuntimeError(data.get("error_message", "Baselinker API error"))
+            raise RuntimeError(data.get("error_message", "Błąd API Baselinker"))
         return data
 
     def get_order_extra_fields(self) -> list[dict[str, Any]]:

@@ -358,7 +358,7 @@ export default function AdminCosts() {
                       <thead>
                         <tr>
                           <th>Data</th>
-                          <th>Pracownik</th>
+                          <th>Pracownicy</th>
                           <th>Produkt</th>
                           <th>Akcja</th>
                           <th className="num">Ilość</th>
@@ -369,11 +369,11 @@ export default function AdminCosts() {
                         {historyItems.map(item => (
                           <tr key={item.id}>
                             <td>{new Date(item.timestamp).toLocaleString('pl-PL')}</td>
-                            <td>{item.actor_name}</td>
+                            <td>{item.worker_names.join(', ')}</td>
                             <td>{item.product_sku}</td>
                             <td>{ACTION_TYPE_LABELS[item.action_type as keyof typeof ACTION_TYPE_LABELS] || item.action_type}</td>
                             <td className="num">{item.quantity}</td>
-                            <td className="num">{item.cost ? formatCurrency(item.cost) : '-'}</td>
+                            <td className="num">{item.cost != null ? formatCurrency(item.cost) : '-'}</td>
                           </tr>
                         ))}
                       </tbody>

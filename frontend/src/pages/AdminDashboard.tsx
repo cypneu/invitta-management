@@ -59,14 +59,12 @@ export default function AdminDashboard() {
 
   const orderCounts = useMemo(() => ({
     all: orders.length,
-    fetched: orders.filter(order => order.status === 'fetched').length,
     in_progress: orders.filter(order => order.status === 'in_progress').length,
     done: orders.filter(order => order.status === 'done').length,
   }), [orders]);
 
   const orderSummaryItems = [
     { key: 'all', label: 'Wszystkie', value: orderCounts.all },
-    { key: 'fetched', label: ORDER_STATUS_LABELS.fetched, value: orderCounts.fetched },
     { key: 'in_progress', label: ORDER_STATUS_LABELS.in_progress, value: orderCounts.in_progress },
     { key: 'done', label: ORDER_STATUS_LABELS.done, value: orderCounts.done },
   ];

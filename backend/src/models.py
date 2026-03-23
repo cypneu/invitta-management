@@ -66,6 +66,7 @@ class User(Base):
     )
 
     actions = relationship("OrderPositionAction", back_populates="actor")
+    action_assignments = relationship("OrderPositionActionWorker", back_populates="user")
 
     @property
     def name(self) -> str:
@@ -106,7 +107,7 @@ class Order(Base):
     expected_shipment_date = Column(Date, nullable=True, index=True)
     fullname = Column(String(200), nullable=True)
     company = Column(String(200), nullable=True)
-    status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.fetched, index=True)
+    status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.in_progress, index=True)
 
     __table_args__ = (
         UniqueConstraint("integration", "external_id", name="uq_orders_integration_external_id"),
@@ -152,6 +153,33 @@ class OrderPositionAction(Base):
 
     order_position = relationship("OrderPosition", back_populates="actions")
     actor = relationship("User", back_populates="actions")
+    worker_assignments = relationship(
+        "OrderPositionActionWorker",
+        back_populates="action",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrderPositionActionWorker(Base):
+    __tablename__ = "order_position_action_workers"
+
+    action_id = Column(
+        Integer,
+        ForeignKey("order_position_actions.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
+
+    action = relationship("OrderPositionAction", back_populates="worker_assignments")
+    user = relationship("User", back_populates="action_assignments")
 
 
 class SyncState(Base):

@@ -46,6 +46,16 @@ function formatEntryCount(count: number): string {
     return `${count} wpisów`;
 }
 
+function formatEntryTimestamp(timestamp: string): string {
+    return new Date(timestamp).toLocaleString('pl-PL', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
 export default function WorkerEntries() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
@@ -60,6 +70,7 @@ export default function WorkerEntries() {
     const [pageFirstDay, setPageFirstDay] = useState<string | null>(null);
     const [pageLastDay, setPageLastDay] = useState<string | null>(null);
     const [activeOrdersCount, setActiveOrdersCount] = useState(0);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Edit state
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -70,15 +81,32 @@ export default function WorkerEntries() {
             navigate('/');
             return;
         }
-        loadEntries(1);
         loadActiveOrdersCount();
     }, [user]);
+
+    useEffect(() => {
+        if (!user) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            loadEntries(1);
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [user, searchQuery]);
 
     async function loadEntries(page = currentPage) {
         if (!user) return;
         setLoading(true);
         try {
-            const data = await getActionHistoryPaginated(user.id, page, DAYS_PER_PAGE);
+            const data = await getActionHistoryPaginated(
+                user.id,
+                page,
+                DAYS_PER_PAGE,
+                undefined,
+                searchQuery.trim() || undefined,
+            );
             setEntries(data.items);
             setCurrentPage(data.page);
             setTotalPages(data.total_pages);
@@ -185,6 +213,29 @@ export default function WorkerEntries() {
                 onLogout={handleLogout}
             />
 
+            <div className="worker-search-bar">
+                <div className="worker-search-input-wrapper">
+                    <input
+                        type="text"
+                        placeholder="Szukaj po SKU..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="search-input"
+                    />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            className="worker-search-clear"
+                            onClick={() => setSearchQuery('')}
+                            aria-label="Wyczyść wyszukiwanie"
+                            title="Wyczyść"
+                        >
+                            ×
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <main className="main-content">
                 {error && <div className="error-message" onClick={() => setError(null)}>{error}</div>}
                 {success && <div className="success-message" onClick={() => setSuccess(null)}>{success}</div>}
@@ -194,7 +245,7 @@ export default function WorkerEntries() {
                         {loading ? (
                             <p>Ładowanie...</p>
                         ) : entries.length === 0 ? (
-                            <p className="text-muted">Brak wpisów</p>
+                            <p className="text-muted">{searchQuery ? 'Brak wyników wyszukiwania' : 'Brak wpisów'}</p>
                         ) : (
                             <>
                                 <div className="table-responsive">
@@ -219,80 +270,98 @@ export default function WorkerEntries() {
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {group.items.map(entry => (
-                                                    <tr key={entry.id}>
-                                                        <td data-label="Data">
-                                                            <span className="entry-value">{new Date(entry.timestamp).toLocaleString('pl-PL')}</span>
-                                                        </td>
-                                                        <td data-label="Produkt">
-                                                            <span className="entry-value">{entry.product_sku}</span>
-                                                        </td>
-                                                        <td data-label="Akcja">
-                                                            <span className="entry-value">
-                                                                {ACTION_TYPE_LABELS[entry.action_type as keyof typeof ACTION_TYPE_LABELS] || entry.action_type}
-                                                            </span>
-                                                        </td>
-                                                        <td data-label="Ilość" className="num">
-                                                            {editingId === entry.id ? (
+                                                {group.items.map(entry => {
+                                                    const canManageEntry = !!user && entry.worker_ids.includes(user.id);
+                                                    return (
+                                                        <tr key={entry.id}>
+                                                            <td data-label="Data">
+                                                                <span className="entry-value">{formatEntryTimestamp(entry.timestamp)}</span>
+                                                            </td>
+                                                            <td data-label="Produkt">
+                                                                <span className="entry-value">{entry.product_sku}</span>
+                                                            </td>
+                                                            <td
+                                                                data-label="Akcja"
+                                                                className={entry.worker_names.length > 1 ? 'entry-action-cell entry-action-cell-with-workers' : 'entry-action-cell'}
+                                                            >
                                                                 <span className="entry-value">
-                                                                    <input
-                                                                        type="number"
-                                                                        min="1"
-                                                                        value={editQuantity}
-                                                                        onChange={(e) => setEditQuantity(e.target.value)}
-                                                                        className="qty-input-small"
-                                                                        autoFocus
-                                                                    />
+                                                                    {ACTION_TYPE_LABELS[entry.action_type as keyof typeof ACTION_TYPE_LABELS] || entry.action_type}
                                                                 </span>
-                                                            ) : (
-                                                                <span className="entry-value">{entry.quantity}</span>
-                                                            )}
-                                                        </td>
-                                                        <td data-label="Koszt" className="num">
-                                                            <span className="entry-value">{entry.cost ? formatCurrency(entry.cost) : '-'}</span>
-                                                        </td>
-                                                        <td data-label="Akcje" className="actions-cell">
-                                                            <div className="entry-actions">
-                                                                {editingId === entry.id ? (
-                                                                    <>
-                                                                        <button
-                                                                            className="btn-primary btn-xs"
-                                                                            onClick={() => handleUpdate(entry.id)}
-                                                                            disabled={submitting}
-                                                                        >
-                                                                            ✓
-                                                                        </button>
-                                                                        <button
-                                                                            className="btn-secondary btn-xs"
-                                                                            onClick={() => setEditingId(null)}
-                                                                        >
-                                                                            ×
-                                                                        </button>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <button
-                                                                            className="btn-secondary btn-xs"
-                                                                            onClick={() => {
-                                                                                setEditingId(entry.id);
-                                                                                setEditQuantity(String(entry.quantity));
-                                                                            }}
-                                                                        >
-                                                                            ✎
-                                                                        </button>
-                                                                        <button
-                                                                            className="btn-danger btn-xs"
-                                                                            onClick={() => handleDelete(entry.id)}
-                                                                            disabled={submitting}
-                                                                        >
-                                                                            ×
-                                                                        </button>
-                                                                    </>
+                                                                {entry.worker_names.length > 1 && (
+                                                                    <div className="entry-subvalue entry-workers-subvalue">
+                                                                        Pracownicy: {entry.worker_names.join(', ')}
+                                                                    </div>
                                                                 )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                                {entry.actor_id !== user?.id && (
+                                                                    <div className="entry-subvalue">
+                                                                        Wpis dodał: {entry.actor_name}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td data-label="Ilość" className="num">
+                                                                {editingId === entry.id ? (
+                                                                    <span className="entry-value">
+                                                                        <input
+                                                                            type="number"
+                                                                            min="1"
+                                                                            value={editQuantity}
+                                                                            onChange={(e) => setEditQuantity(e.target.value)}
+                                                                            className="qty-input-small"
+                                                                            autoFocus
+                                                                        />
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="entry-value">{entry.quantity}</span>
+                                                                )}
+                                                            </td>
+                                                            <td data-label="Koszt" className="num">
+                                                                <span className="entry-value">{entry.cost != null ? formatCurrency(entry.cost) : '-'}</span>
+                                                            </td>
+                                                            <td data-label="Akcje" className="actions-cell">
+                                                                <div className="entry-actions">
+                                                                    {editingId === entry.id ? (
+                                                                        <>
+                                                                            <button
+                                                                                className="btn-primary btn-xs"
+                                                                                onClick={() => handleUpdate(entry.id)}
+                                                                                disabled={submitting}
+                                                                            >
+                                                                                ✓
+                                                                            </button>
+                                                                            <button
+                                                                                className="btn-secondary btn-xs"
+                                                                                onClick={() => setEditingId(null)}
+                                                                            >
+                                                                                ×
+                                                                            </button>
+                                                                        </>
+                                                                    ) : canManageEntry ? (
+                                                                        <>
+                                                                            <button
+                                                                                className="btn-secondary btn-xs"
+                                                                                onClick={() => {
+                                                                                    setEditingId(entry.id);
+                                                                                    setEditQuantity(String(entry.quantity));
+                                                                                }}
+                                                                            >
+                                                                                ✎
+                                                                            </button>
+                                                                            <button
+                                                                                className="btn-danger btn-xs"
+                                                                                onClick={() => handleDelete(entry.id)}
+                                                                                disabled={submitting}
+                                                                            >
+                                                                                ×
+                                                                            </button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <span className="text-muted">Tylko podgląd</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         ))}
                                     </table>

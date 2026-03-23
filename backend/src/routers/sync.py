@@ -13,9 +13,9 @@ def require_admin(user_id: int, db: Session) -> User:
     """Verify user is an admin."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono użytkownika")
     if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Wymagane uprawnienia administratora")
     return user
 
 

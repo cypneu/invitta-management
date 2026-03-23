@@ -1,6 +1,9 @@
 from datetime import datetime, date
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from enum import Enum
+
+from .order_sources import normalize_order_source
+from .order_statuses import normalize_order_status
 
 
 class ShapeType(str, Enum):
@@ -28,7 +31,6 @@ class EdgeType(str, Enum):
 
 
 class OrderStatus(str, Enum):
-    fetched = "fetched"
     in_progress = "in_progress"
     done = "done"
     cancelled = "cancelled"
@@ -161,6 +163,16 @@ class OrderResponse(BaseModel):
     status: OrderStatus
     positions: list[OrderPositionResponse] = []
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status_value(cls, value: object) -> str:
+        return normalize_order_status(value)
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source_label(cls, value: str | None, info: ValidationInfo) -> str | None:
+        return normalize_order_source(value, info.data.get("integration"))
+
     class Config:
         from_attributes = True
 
@@ -176,6 +188,16 @@ class OrderListResponse(BaseModel):
     company: str | None
     status: OrderStatus
     position_count: int = 0
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status_value(cls, value: object) -> str:
+        return normalize_order_status(value)
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source_label(cls, value: str | None, info: ValidationInfo) -> str | None:
+        return normalize_order_source(value, info.data.get("integration"))
 
     class Config:
         from_attributes = True
@@ -206,13 +228,22 @@ class OrderWithPositionsListResponse(BaseModel):
     position_count: int = 0
     positions: list[OrderPositionBrief] = []
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status_value(cls, value: object) -> str:
+        return normalize_order_status(value)
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source_label(cls, value: str | None, info: ValidationInfo) -> str | None:
+        return normalize_order_source(value, info.data.get("integration"))
+
     class Config:
         from_attributes = True
 
 
 class OrderStatusCountsResponse(BaseModel):
     all: int = 0
-    fetched: int = 0
     in_progress: int = 0
     done: int = 0
     cancelled: int = 0
@@ -231,6 +262,7 @@ class PaginatedOrderWithPositionsListResponse(BaseModel):
 class ActionCreate(BaseModel):
     action_type: ActionType
     quantity: int = Field(..., gt=0)
+    shared_worker_ids: list[int] | None = None
 
 
 class ActionResponse(BaseModel):
@@ -241,6 +273,8 @@ class ActionResponse(BaseModel):
     cost: float | None = None
     actor_id: int
     actor_name: str
+    worker_ids: list[int] = []
+    worker_names: list[str] = []
     timestamp: datetime
 
     class Config:

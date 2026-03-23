@@ -73,7 +73,6 @@ export default function AdminOrders() {
     const [totalPages, setTotalPages] = useState(1);
     const [statusCounts, setStatusCounts] = useState<OrderStatusCounts>({
         all: 0,
-        fetched: 0,
         in_progress: 0,
         done: 0,
         cancelled: 0,
@@ -359,7 +358,6 @@ export default function AdminOrders() {
 
     const getStatusBadgeClass = (status: OrderStatus): string => {
         switch (status) {
-            case 'fetched': return 'status-badge status-fetched';
             case 'in_progress': return 'status-badge status-in-progress';
             case 'done': return 'status-badge status-done';
             case 'cancelled': return 'status-badge status-cancelled';
@@ -371,7 +369,6 @@ export default function AdminOrders() {
     const selectedCount = selectedOrderIds.size;
     const statusTabs: Array<{ value: OrderStatus | ''; label: string; count: number }> = [
         { value: '', label: 'Wszystkie', count: statusCounts.all },
-        { value: 'fetched', label: 'Pobrane', count: statusCounts.fetched },
         { value: 'in_progress', label: 'W realizacji', count: statusCounts.in_progress },
         { value: 'done', label: 'Gotowe', count: statusCounts.done },
     ];
@@ -475,7 +472,6 @@ export default function AdminOrders() {
                                                 }}
                                             >
                                                 <option value="">-- wybierz --</option>
-                                                <option value="fetched">{ORDER_STATUS_LABELS['fetched']}</option>
                                                 <option value="in_progress">{ORDER_STATUS_LABELS['in_progress']}</option>
                                                 <option value="done">{ORDER_STATUS_LABELS['done']}</option>
                                                 <option value="cancelled">{ORDER_STATUS_LABELS['cancelled']}</option>
@@ -704,7 +700,6 @@ export default function AdminOrders() {
                                                 }
                                             }}
                                         >
-                                            <option value="fetched">{ORDER_STATUS_LABELS['fetched']}</option>
                                             <option value="in_progress">{ORDER_STATUS_LABELS['in_progress']}</option>
                                             <option value="done">{ORDER_STATUS_LABELS['done']}</option>
                                             <option value="cancelled">{ORDER_STATUS_LABELS['cancelled']}</option>
@@ -786,58 +781,65 @@ export default function AdminOrders() {
                                                 <span className="text-muted"> Brak</span>
                                             ) : (
                                                 <div className="my-actions-list">
-                                                    {(positionActions[pos.id] || []).map(action => (
-                                                        <div key={action.id} className="my-action-row">
-                                                            <div className="my-action-left">
-                                                                <span className="my-action-type">{ACTION_TYPE_LABELS[action.action_type]}</span>
+                                                    {(positionActions[pos.id] || []).map(action => {
+                                                        const workerLabel = action.worker_names.join(', ');
+
+                                                        return (
+                                                            <div key={action.id} className="my-action-row">
+                                                                <div className="my-action-left">
+                                                                    <span className="my-action-type">{ACTION_TYPE_LABELS[action.action_type]}</span>
+                                                                </div>
+                                                                <div className="my-action-center">
+                                                                    {editingActionId === action.id ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            min="1"
+                                                                            value={editQuantityStr}
+                                                                            onChange={e => setEditQuantityStr(e.target.value)}
+                                                                            className="qty-input-small"
+                                                                        />
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="my-action-qty">x{action.quantity}</span>
+                                                                            <span className="my-action-author">{action.actor_name}</span>
+                                                                            {action.worker_names.length > 1 && (
+                                                                                <span className="my-action-workers">Pracownicy: {workerLabel}</span>
+                                                                            )}
+                                                                            <span className="my-action-time">{formatTime(action.timestamp)}</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                                <div className="my-action-right">
+                                                                    {editingActionId === action.id ? (
+                                                                        <>
+                                                                            <button className="icon-btn" onClick={() => handleUpdateAction(action.id, action.action_type, pos.id)}>✓</button>
+                                                                            <button className="icon-btn" onClick={() => setEditingActionId(null)}>✕</button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <div className="action-icons">
+                                                                            <button
+                                                                                className="icon-btn"
+                                                                                onClick={() => {
+                                                                                    setEditingActionId(action.id);
+                                                                                    setEditQuantityStr(String(action.quantity));
+                                                                                }}
+                                                                                title="Edytuj"
+                                                                            >
+                                                                                ✎
+                                                                            </button>
+                                                                            <button
+                                                                                className="icon-btn icon-btn-danger"
+                                                                                onClick={() => handleDeleteAction(action.id, pos.id)}
+                                                                                title="Usuń"
+                                                                            >
+                                                                                ×
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                            <div className="my-action-center">
-                                                                {editingActionId === action.id ? (
-                                                                    <input
-                                                                        type="number"
-                                                                        min="1"
-                                                                        value={editQuantityStr}
-                                                                        onChange={e => setEditQuantityStr(e.target.value)}
-                                                                        className="qty-input-small"
-                                                                    />
-                                                                ) : (
-                                                                    <>
-                                                                        <span className="my-action-qty">x{action.quantity}</span>
-                                                                        <span className="my-action-author">{action.actor_name}</span>
-                                                                        <span className="my-action-time">{formatTime(action.timestamp)}</span>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                            <div className="my-action-right">
-                                                                {editingActionId === action.id ? (
-                                                                    <>
-                                                                        <button className="icon-btn" onClick={() => handleUpdateAction(action.id, action.action_type, pos.id)}>✓</button>
-                                                                        <button className="icon-btn" onClick={() => setEditingActionId(null)}>✕</button>
-                                                                    </>
-                                                                ) : (
-                                                                    <div className="action-icons">
-                                                                        <button
-                                                                            className="icon-btn"
-                                                                            onClick={() => {
-                                                                                setEditingActionId(action.id);
-                                                                                setEditQuantityStr(String(action.quantity));
-                                                                            }}
-                                                                            title="Edytuj"
-                                                                        >
-                                                                            ✎
-                                                                        </button>
-                                                                        <button
-                                                                            className="icon-btn icon-btn-danger"
-                                                                            onClick={() => handleDeleteAction(action.id, pos.id)}
-                                                                            title="Usuń"
-                                                                        >
-                                                                            ×
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>

@@ -2,7 +2,7 @@
 
 export type ActionType = 'cutting' | 'sewing' | 'ironing' | 'packing';
 export type ShapeType = 'rectangular' | 'round' | 'oval';
-export type OrderStatus = 'fetched' | 'in_progress' | 'done' | 'cancelled';
+export type OrderStatus = 'in_progress' | 'done' | 'cancelled';
 export type EdgeType = 'U3' | 'U4' | 'U5' | 'O1' | 'O3' | 'O5' | 'OGK' | 'LA';
 export type SyncIntegration = 'baselinker' | 'invitta';
 
@@ -137,8 +137,11 @@ export interface Action {
     order_position_id: number;
     action_type: ActionType;
     quantity: number;
+    cost?: number | null;
     actor_id: number;
     actor_name: string;
+    worker_ids: number[];
+    worker_names: string[];
     timestamp: string;
 }
 
@@ -155,6 +158,7 @@ export interface OrderPositionWithActions {
 export interface ActionCreate {
     action_type: ActionType;
     quantity: number;
+    shared_worker_ids?: number[];
 }
 
 export interface SyncSourceStatus {
@@ -204,7 +208,6 @@ export interface PaginatedOrderFilters extends OrderFilters {
 
 export interface OrderStatusCounts {
     all: number;
-    fetched: number;
     in_progress: number;
     done: number;
     cancelled: number;
@@ -227,7 +230,6 @@ export const ACTION_TYPE_LABELS: Record<ActionType, string> = {
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-    fetched: 'Pobrane',
     in_progress: 'W realizacji',
     done: 'Gotowe',
     cancelled: 'Anulowane',

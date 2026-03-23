@@ -125,7 +125,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     """Get a single product by ID."""
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
     return product
 
 
@@ -134,7 +134,7 @@ def get_product_by_sku(sku: str, db: Session = Depends(get_db)):
     """Get a single product by SKU."""
     product = db.query(Product).filter(Product.sku == sku).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
     return product
 
 
@@ -149,12 +149,12 @@ def create_product(
 ):
     """Create a new product (admin only)."""
     if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Wymagane uprawnienia administratora")
 
     # Check if SKU already exists
     existing = db.query(Product).filter(Product.sku == product_data.sku).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Product with this SKU already exists")
+        raise HTTPException(status_code=400, detail="Produkt z tym SKU już istnieje")
 
     product = Product(
         sku=product_data.sku,
@@ -180,17 +180,17 @@ def update_product(
 ):
     """Update an existing product (admin only)."""
     if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Wymagane uprawnienia administratora")
 
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
 
     # Check if SKU already taken by another product
     if product_data.sku and product_data.sku != product.sku:
         existing = db.query(Product).filter(Product.sku == product_data.sku).first()
         if existing:
-            raise HTTPException(status_code=400, detail="Product with this SKU already exists")
+            raise HTTPException(status_code=400, detail="Produkt z tym SKU już istnieje")
 
     # Update fields that are provided
     update_data = product_data.model_dump(exclude_unset=True)
@@ -210,11 +210,11 @@ def delete_product(
 ):
     """Delete a product (admin only)."""
     if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Wymagane uprawnienia administratora")
 
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
 
     # Check if product is used in any order positions
     from ..models import OrderPosition
@@ -222,9 +222,9 @@ def delete_product(
     if position_count > 0:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot delete product - it is used in {position_count} order position(s)"
+            detail=f"Nie można usunąć produktu, ponieważ jest używany w {position_count} pozycjach zamówień",
         )
 
     db.delete(product)
     db.commit()
-    return {"message": "Product deleted successfully"}
+    return {"message": "Produkt został usunięty"}

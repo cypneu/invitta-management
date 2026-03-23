@@ -8,6 +8,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..order_sources import normalize_order_source
 from .order_sync import SyncItem, SyncOrder, get_sync_state, sync_normalized_orders
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class InvittaClient:
         response.raise_for_status()
         payload = response.json()
         if payload.get("status") != "success":
-            raise RuntimeError(payload.get("message", "Invitta API error"))
+            raise RuntimeError(payload.get("message", "Błąd API Invitta"))
         return payload.get("data") or {}
 
     def get_orders(self, date_from: str) -> list[dict[str, Any]]:
@@ -80,7 +81,7 @@ def sync_invitta_orders(db: Session) -> dict[str, int | str]:
                     integration="invitta",
                     external_id=str(order_id),
                     created_timestamp=parse_timestamp(order.get("created_at")),
-                    source=clean_text(order.get("source")),
+                    source=normalize_order_source(clean_text(order.get("source")), "invitta"),
                     fullname=extract_fullname(details),
                     company=extract_company(details),
                     expected_shipment_date=None,

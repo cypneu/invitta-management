@@ -8,7 +8,15 @@ from alembic import context
 
 # Import models and base
 from src.database import Base
-from src.models import User, Product, Order, OrderPosition, OrderPositionAction, SyncState
+from src.models import (
+    User,
+    Product,
+    Order,
+    OrderPosition,
+    OrderPositionAction,
+    OrderPositionActionWorker,
+    SyncState,
+)
 
 # this is the Alembic Config object
 config = context.config

@@ -14,9 +14,9 @@ def require_admin(user_id: int, db: Session) -> User:
     """Verify user is an admin."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono użytkownika")
     if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Wymagane uprawnienia administratora")
     return user
 
 
@@ -30,7 +30,7 @@ def get_current_user(
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono użytkownika")
     return user
 
 
@@ -39,7 +39,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Login with user code (case-sensitive)."""
     user = db.query(User).filter(User.code == request.code).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono użytkownika")
     return user
 
 
@@ -60,7 +60,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     """Get a single user by ID."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono użytkownika")
     return user
 
 
@@ -87,7 +87,7 @@ def create_worker(
             else:
                 allowed_types.append(at.value)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid action type: {at}")
+            raise HTTPException(status_code=400, detail=f"Nieprawidłowy typ akcji: {at}")
 
     db_worker = User(
         first_name=worker.first_name,
@@ -114,7 +114,7 @@ def update_worker(
 
     db_worker = db.query(User).filter(User.id == worker_id, User.role == "worker").first()
     if not db_worker:
-        raise HTTPException(status_code=404, detail="Pracownik nie znaleziony")
+        raise HTTPException(status_code=404, detail="Nie znaleziono pracownika")
 
     if worker.code:
         # Check if new code conflicts with another user (case-sensitive)
@@ -138,7 +138,7 @@ def update_worker(
                 else:
                     allowed_types.append(at.value)
             except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid action type: {at}")
+                raise HTTPException(status_code=400, detail=f"Nieprawidłowy typ akcji: {at}")
         db_worker.allowed_action_types = allowed_types
 
     db.commit()
@@ -157,10 +157,10 @@ def delete_worker(
 
     db_worker = db.query(User).filter(User.id == worker_id, User.role == "worker").first()
     if not db_worker:
-        raise HTTPException(status_code=404, detail="Pracownik nie znaleziony")
+        raise HTTPException(status_code=404, detail="Nie znaleziono pracownika")
 
     # Check if worker has actions
-    if db_worker.actions:
+    if db_worker.actions or db_worker.action_assignments:
         raise HTTPException(
             status_code=400,
             detail="Nie można usunąć pracownika z istniejącymi akcjami produkcji",

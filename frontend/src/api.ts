@@ -10,6 +10,19 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+async function getApiErrorDetail(response: Response, fallback: string): Promise<string> {
+    try {
+        const payload = await response.json() as { detail?: unknown };
+        if (typeof payload.detail === 'string') {
+            return payload.detail;
+        }
+    } catch {
+        return fallback;
+    }
+
+    return fallback;
+}
+
 // Auth API
 export async function login(code: string): Promise<User> {
     const response = await fetch(`${API_BASE}/api/users/login`, {
@@ -18,7 +31,7 @@ export async function login(code: string): Promise<User> {
         body: JSON.stringify({ code }),
     });
     if (!response.ok) {
-        throw new Error('Nie znaleziono użytkownika');
+        throw new Error(await getApiErrorDetail(response, 'Nie znaleziono użytkownika'));
     }
     return response.json();
 }
@@ -37,7 +50,7 @@ export async function getAllUsers(): Promise<User[]> {
 export async function getUser(userId: number): Promise<User> {
     const response = await fetch(`${API_BASE}/api/users/${userId}`);
     if (!response.ok) {
-        throw new Error('User not found');
+        throw new Error(await getApiErrorDetail(response, 'Nie znaleziono użytkownika'));
     }
     return response.json();
 }
@@ -49,8 +62,7 @@ export async function createWorker(userId: number, worker: UserCreate): Promise<
         body: JSON.stringify(worker),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się utworzyć pracownika');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się utworzyć pracownika'));
     }
     return response.json();
 }
@@ -62,8 +74,7 @@ export async function updateWorker(userId: number, workerId: number, worker: Use
         body: JSON.stringify(worker),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się zaktualizować pracownika');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zaktualizować pracownika'));
     }
     return response.json();
 }
@@ -73,8 +84,7 @@ export async function deleteWorker(userId: number, workerId: number): Promise<vo
         method: 'DELETE',
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się usunąć pracownika');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się usunąć pracownika'));
     }
 }
 
@@ -98,7 +108,7 @@ export async function getProductsPaginated(filters: PaginatedProductFilters = {}
 export async function getProduct(productId: number): Promise<Product> {
     const response = await fetch(`${API_BASE}/api/products/${productId}`);
     if (!response.ok) {
-        throw new Error('Product not found');
+        throw new Error(await getApiErrorDetail(response, 'Nie znaleziono produktu'));
     }
     return response.json();
 }
@@ -115,8 +125,7 @@ export async function createProduct(userId: number, data: ProductCreate): Promis
         body: JSON.stringify(data),
     });
     if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.detail || 'Nie udało się utworzyć produktu');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się utworzyć produktu'));
     }
     return response.json();
 }
@@ -128,8 +137,7 @@ export async function updateProduct(userId: number, productId: number, data: Pro
         body: JSON.stringify(data),
     });
     if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.detail || 'Nie udało się zaktualizować produktu');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zaktualizować produktu'));
     }
     return response.json();
 }
@@ -139,8 +147,7 @@ export async function deleteProduct(userId: number, productId: number): Promise<
         method: 'DELETE',
     });
     if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.detail || 'Nie udało się usunąć produktu');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się usunąć produktu'));
     }
 }
 
@@ -182,7 +189,7 @@ export async function getOrdersForWorker(): Promise<OrderListItem[]> {
 export async function getOrder(orderId: number): Promise<Order> {
     const response = await fetch(`${API_BASE}/api/orders/${orderId}`);
     if (!response.ok) {
-        throw new Error('Order not found');
+        throw new Error(await getApiErrorDetail(response, 'Nie znaleziono zamówienia'));
     }
     return response.json();
 }
@@ -194,8 +201,7 @@ export async function createOrder(userId: number, order: OrderCreate): Promise<O
         body: JSON.stringify(order),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się utworzyć zamówienia');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się utworzyć zamówienia'));
     }
     return response.json();
 }
@@ -207,8 +213,7 @@ export async function updateOrder(userId: number, orderId: number, order: OrderU
         body: JSON.stringify(order),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się zaktualizować zamówienia');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zaktualizować zamówienia'));
     }
     return response.json();
 }
@@ -220,8 +225,7 @@ export async function updateOrderStatus(userId: number, orderId: number, status:
         body: JSON.stringify({ status }),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się zmienić statusu zamówienia');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zmienić statusu zamówienia'));
     }
     return response.json();
 }
@@ -233,8 +237,7 @@ export async function bulkUpdateOrderStatus(userId: number, orderIds: number[], 
         body: JSON.stringify({ order_ids: orderIds, status }),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się zmienić statusów');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zmienić statusów'));
     }
     return response.json();
 }
@@ -246,8 +249,7 @@ export async function updateOrderShipmentDate(userId: number, orderId: number, s
         body: JSON.stringify({ expected_shipment_date: shipmentDate }),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się zaktualizować daty wysyłki');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zaktualizować daty wysyłki'));
     }
     return response.json();
 }
@@ -257,8 +259,7 @@ export async function deleteOrder(userId: number, orderId: number): Promise<void
         method: 'DELETE',
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się usunąć zamówienia');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się usunąć zamówienia'));
     }
 }
 
@@ -266,7 +267,7 @@ export async function deleteOrder(userId: number, orderId: number): Promise<void
 export async function getOrderPositions(orderId: number): Promise<OrderPositionWithActions[]> {
     const response = await fetch(`${API_BASE}/api/orders/${orderId}/positions`);
     if (!response.ok) {
-        throw new Error('Failed to get positions');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się pobrać pozycji'));
     }
     return response.json();
 }
@@ -274,7 +275,7 @@ export async function getOrderPositions(orderId: number): Promise<OrderPositionW
 export async function getPosition(positionId: number): Promise<OrderPositionWithActions> {
     const response = await fetch(`${API_BASE}/api/order-positions/${positionId}`);
     if (!response.ok) {
-        throw new Error('Position not found');
+        throw new Error(await getApiErrorDetail(response, 'Nie znaleziono pozycji'));
     }
     return response.json();
 }
@@ -286,8 +287,7 @@ export async function addPosition(userId: number, orderId: number, productId: nu
         body: JSON.stringify({ product_id: productId, quantity }),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się dodać pozycji');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się dodać pozycji'));
     }
 }
 
@@ -296,8 +296,7 @@ export async function deletePosition(userId: number, positionId: number): Promis
         method: 'DELETE',
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się usunąć pozycji');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się usunąć pozycji'));
     }
 }
 
@@ -309,8 +308,7 @@ export async function addAction(userId: number, positionId: number, action: Acti
         body: JSON.stringify(action),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się dodać akcji');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się dodać akcji'));
     }
     return response.json();
 }
@@ -325,8 +323,7 @@ export async function deleteAction(userId: number, actionId: number): Promise<vo
         method: 'DELETE',
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się usunąć akcji');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się usunąć akcji'));
     }
 }
 
@@ -337,8 +334,7 @@ export async function updateAction(userId: number, actionId: number, quantity: n
         body: JSON.stringify({ quantity }),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Nie udało się zaktualizować akcji');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zaktualizować akcji'));
     }
 }
 
@@ -350,6 +346,8 @@ export interface ActionHistoryItem {
     quantity: number;
     actor_id: number;
     actor_name: string;
+    worker_ids: number[];
+    worker_names: string[];
     timestamp: string;
     product_sku: string;
     cost: number | null;
@@ -384,11 +382,13 @@ export async function getActionHistoryPaginated(
     workerId?: number,
     page = 1,
     daysPerPage = 10,
-    actionType?: ActionType
+    actionType?: ActionType,
+    productSku?: string
 ): Promise<PaginatedActionHistoryResponse> {
     const params = new URLSearchParams();
     if (workerId) params.append('worker_id', String(workerId));
     if (actionType) params.append('action_type', actionType);
+    if (productSku) params.append('product_sku', productSku);
     params.append('page', String(page));
     params.append('days_per_page', String(daysPerPage));
     const response = await fetch(`${API_BASE}/api/actions/history/paginated?${params}`);
@@ -420,6 +420,10 @@ export async function triggerSync(userId: number): Promise<SyncResult> {
     const response = await fetch(`${API_BASE}/api/sync/trigger?user_id=${userId}`, {
         method: 'POST',
     });
+    if (!response.ok) {
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się uruchomić synchronizacji'));
+    }
+
     return response.json();
 }
 
@@ -509,8 +513,7 @@ export async function updateCostConfig(userId: number, config: Partial<CostConfi
         body: JSON.stringify(config),
     });
     if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to update config');
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się zaktualizować konfiguracji'));
     }
     return response.json();
 }

@@ -7,10 +7,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import cast, func, String
+from sqlalchemy import cast, func, or_, String
 
 from ..database import get_db
 from ..models import Order, OrderPosition, Product, User, OrderStatus
+from ..order_sources import INVITTA_SHOP_SOURCE, is_invitta_shop_source, normalize_order_source, should_preserve_source_label
+from ..order_statuses import normalize_order_status
 from ..schemas import (
     OrderCreate,
     OrderUpdate,
@@ -33,9 +35,9 @@ def require_admin(user_id: int, db: Session) -> User:
     """Verify user is an admin."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono użytkownika")
     if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Wymagane uprawnienia administratora")
     return user
 
 
@@ -61,11 +63,28 @@ def apply_order_filters(
     search: Optional[str] = None,
 ):
     if source:
-        query = query.filter(Order.source == source)
+        if is_invitta_shop_source(source):
+            query = query.filter(
+                Order.integration == "invitta",
+                Order.source.in_(["shop", INVITTA_SHOP_SOURCE]),
+            )
+        elif should_preserve_source_label(source):
+            query = query.filter(Order.source == source)
+        else:
+            query = query.filter(
+                or_(
+                    Order.source == source,
+                    Order.source.like(f"{source} - %"),
+                )
+            )
     if status:
         try:
-            status_enum = OrderStatus(status)
-            query = query.filter(Order.status == status_enum)
+            normalized_status = normalize_order_status(status)
+            if normalized_status == OrderStatusSchema.in_progress.value:
+                query = query.filter(Order.status.in_([OrderStatus.in_progress, OrderStatus.fetched]))
+            else:
+                status_enum = OrderStatus(normalized_status)
+                query = query.filter(Order.status == status_enum)
         except ValueError:
             pass
     if date_from:
@@ -129,7 +148,6 @@ def get_order_status_counts(
 ) -> OrderStatusCountsResponse:
     counts = {
         "all": 0,
-        "fetched": 0,
         "in_progress": 0,
         "done": 0,
         "cancelled": 0,
@@ -148,7 +166,7 @@ def get_order_status_counts(
     )
 
     for status_value, count in rows:
-        counts[str(status_value.value)] = int(count)
+        counts[normalize_order_status(status_value)] += int(count)
         counts["all"] += int(count)
 
     return OrderStatusCountsResponse(**counts)
@@ -255,20 +273,31 @@ def list_orders_paginated(
 def list_order_sources(db: Session = Depends(get_db)):
     """List distinct order sources for filters."""
     rows = (
-        db.query(Order.source)
+        db.query(Order.source, Order.integration)
         .filter(Order.source.isnot(None))
         .distinct()
         .order_by(Order.source.asc())
         .all()
     )
-    return [source for source, in rows if source]
+
+    seen: set[str] = set()
+    labels: list[str] = []
+
+    for source, integration in rows:
+        label = normalize_order_source(source, integration)
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        labels.append(label)
+
+    return labels
 
 
 @router.get("/for-worker", response_model=list[OrderWithPositionsListResponse])
 def list_orders_for_worker(
     db: Session = Depends(get_db),
 ):
-    """List orders for workers - in_progress + done orders from last 7 days."""
+    """List orders for workers - active orders + recently finished orders."""
     from .actions import get_action_totals
     from datetime import datetime, timedelta
     
@@ -281,11 +310,11 @@ def list_orders_for_worker(
     )
 
     # Workers can see:
-    # - All in_progress orders
+    # - All active orders
     # - Done orders with expected_shipment_date within last 7 days
     week_ago = datetime.now().date() - timedelta(days=7)
     query = query.filter(
-        (Order.status == OrderStatus.in_progress) |
+        (Order.status.in_([OrderStatus.in_progress, OrderStatus.fetched])) |
         ((Order.status == OrderStatus.done) & (Order.expected_shipment_date >= week_ago))
     )
 
@@ -333,7 +362,7 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
         .first()
     )
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono zamówienia")
     return order
 
 
@@ -350,7 +379,7 @@ def create_order(
         expected_shipment_date=order_data.expected_shipment_date,
         fullname=order_data.fullname,
         company=order_data.company,
-        status=OrderStatus.fetched,  # New orders start as fetched
+        status=OrderStatus.in_progress,
     )
     db.add(order)
     db.flush()
@@ -360,7 +389,7 @@ def create_order(
         product = db.query(Product).filter(Product.id == pos_data.product_id).first()
         if not product:
             raise HTTPException(
-                status_code=400, detail=f"Product {pos_data.product_id} not found"
+                status_code=400, detail=f"Nie znaleziono produktu o ID {pos_data.product_id}"
             )
         position = OrderPosition(
             order_id=order.id,
@@ -385,17 +414,13 @@ def update_order_status(
 ):
     """Update order status (admin only).
     
-    Allowed transitions:
-    - fetched -> in_progress (start working on order)
-    - in_progress -> fetched (revert to fetched if needed)
-    
     Note: in_progress <-> done transitions are automatic based on position completion.
     """
     require_admin(user_id, db)
 
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono zamówienia")
 
     new_status = status_data.status
     current_status = order.status
@@ -449,7 +474,7 @@ def update_order_shipment_date(
 
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono zamówienia")
 
     order.expected_shipment_date = date_data.expected_shipment_date
     db.commit()
@@ -468,7 +493,7 @@ def update_order(
 
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono zamówienia")
 
     if order_data.expected_shipment_date is not None:
         order.expected_shipment_date = order_data.expected_shipment_date
@@ -492,11 +517,11 @@ def delete_order(
 
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono zamówienia")
 
     db.delete(order)
     db.commit()
-    return {"message": "Order deleted"}
+    return {"message": "Zamówienie zostało usunięte"}
 
 
 # Order Position endpoints
@@ -512,11 +537,11 @@ def add_position(
 
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono zamówienia")
 
     product = db.query(Product).filter(Product.id == position_data.product_id).first()
     if not product:
-        raise HTTPException(status_code=400, detail="Product not found")
+        raise HTTPException(status_code=400, detail="Nie znaleziono produktu")
 
     # Check for duplicate
     existing = (
@@ -529,7 +554,7 @@ def add_position(
     )
     if existing:
         raise HTTPException(
-            status_code=400, detail="Position for this product already exists in order"
+            status_code=400, detail="Pozycja dla tego produktu już istnieje w zamówieniu"
         )
 
     position = OrderPosition(
@@ -573,7 +598,7 @@ def update_position(
         .first()
     )
     if not position:
-        raise HTTPException(status_code=404, detail="Position not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono pozycji")
 
     position.quantity = position_data.quantity
     
@@ -605,7 +630,7 @@ def delete_position(
         .first()
     )
     if not position:
-        raise HTTPException(status_code=404, detail="Position not found")
+        raise HTTPException(status_code=404, detail="Nie znaleziono pozycji")
 
     order = position.order
     
@@ -622,4 +647,4 @@ def delete_position(
         update_order_status_if_needed(db, order)
     
     db.commit()
-    return {"message": "Position deleted"}
+    return {"message": "Pozycja została usunięta"}

@@ -83,7 +83,7 @@ def upsert_order(db: Session, payload: SyncOrder) -> tuple[bool, int]:
             expected_shipment_date=payload.expected_shipment_date,
             fullname=payload.fullname,
             company=payload.company,
-            status=OrderStatus.fetched,
+            status=OrderStatus.in_progress,
         )
         db.add(order)
     else:

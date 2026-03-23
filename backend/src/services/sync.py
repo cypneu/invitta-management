@@ -50,7 +50,7 @@ def sync_all_orders(db: Session) -> dict[str, Any]:
             result.update({"label": provider["label"], "success": True, "message": "OK"})
             orders_synced += int(result["orders_synced"])
             products_created += int(result["products_created"])
-        except Exception as exc:
+        except Exception:
             db.rollback()
             success = False
             logger.exception("Sync failed for %s", provider["integration"])
@@ -60,7 +60,7 @@ def sync_all_orders(db: Session) -> dict[str, Any]:
                 "success": False,
                 "orders_synced": 0,
                 "products_created": 0,
-                "message": str(exc),
+                "message": f"Nie udało się zsynchronizować źródła {provider['label']}",
             }
 
         results.append(result)
@@ -70,15 +70,15 @@ def sync_all_orders(db: Session) -> dict[str, Any]:
             "success": False,
             "orders_synced": 0,
             "products_created": 0,
-            "message": "No sync providers configured",
+            "message": "Brak skonfigurowanych źródeł synchronizacji",
             "sources": [],
         }
 
     if success:
-        message = "Sync completed successfully"
+        message = "Synchronizacja zakończona pomyślnie"
     else:
         failed = ", ".join(result["label"] for result in results if not result["success"])
-        message = f"Sync finished with errors: {failed}"
+        message = f"Synchronizacja zakończyła się błędami: {failed}"
 
     return {
         "success": success,
