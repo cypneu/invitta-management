@@ -7,7 +7,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from .order_sync import SyncItem, SyncOrder, get_sync_state, sync_normalized_orders
+from .order_sync import MAX_ORDERS_PER_SYNC, SyncItem, SyncOrder, get_sync_state, sync_normalized_orders
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class BaselinkerClient:
     def get_order_extra_fields(self) -> list[dict[str, Any]]:
         return self._call("getOrderExtraFields").get("extra_fields", [])
 
-    def get_orders(self, date_from: int) -> list[dict[str, Any]]:
+    def get_orders(self, date_from: int, max_orders: int | None = None) -> list[dict[str, Any]]:
         orders: list[dict[str, Any]] = []
         cursor = date_from
 
@@ -55,6 +55,9 @@ class BaselinkerClient:
                 return orders
 
             orders.extend(batch)
+
+            if max_orders and len(orders) >= max_orders:
+                return orders
 
             if len(batch) < 100:
                 return orders
@@ -77,7 +80,7 @@ class BaselinkerClient:
         return result
 
 
-def sync_baselinker_orders(db: Session) -> dict[str, int | str]:
+def sync_baselinker_orders(db: Session, sync_started_at: int) -> dict[str, int | str]:
     if not settings.baselinker_api_token:
         return {"integration": "baselinker", "orders_synced": 0, "products_created": 0}
 
@@ -93,32 +96,55 @@ def sync_baselinker_orders(db: Session) -> dict[str, int | str]:
         logger.warning("Failed to fetch Baselinker order sources: %s", exc)
         order_sources = {}
 
+    raw_orders = client.get_orders(state.last_sync_timestamp, max_orders=MAX_ORDERS_PER_SYNC)
+    all_fetched = len(raw_orders) < MAX_ORDERS_PER_SYNC
+
     def normalized_orders() -> list[SyncOrder]:
         items: list[SyncOrder] = []
-        for order in client.get_orders(state.last_sync_timestamp):
+        for order in raw_orders:
             order_id = int(order["order_id"])
-            items.append(
-                SyncOrder(
-                    integration="baselinker",
-                    external_id=str(order_id),
-                    created_timestamp=int(order.get("date_add", 0)),
-                    source=order_sources.get(order.get("order_source_id")) or order.get("order_source"),
-                    fullname=clean_text(order.get("invoice_fullname")),
-                    company=clean_text(order.get("invoice_company")),
-                    expected_shipment_date=load_expected_shipment_date(client, order_id),
-                    items=[
-                        SyncItem(
-                            sku=product.get("sku", ""),
-                            quantity=int(product.get("quantity", 1) or 1),
-                        )
-                        for product in order.get("products", [])
-                        if product.get("sku")
-                    ],
+            # API call — load_expected_shipment_date has its own error handling
+            # and returns None on failure, so it won't propagate
+            shipment_date = load_expected_shipment_date(client, order_id)
+            try:
+                # Data processing — catch parsing/validation errors per order
+                items.append(
+                    SyncOrder(
+                        integration="baselinker",
+                        external_id=str(order_id),
+                        created_timestamp=int(order.get("date_add", 0)),
+                        source=order_sources.get(order.get("order_source_id")) or order.get("order_source"),
+                        fullname=clean_text(order.get("invoice_fullname")),
+                        company=clean_text(order.get("invoice_company")),
+                        expected_shipment_date=shipment_date,
+                        items=[
+                            SyncItem(
+                                sku=product.get("sku", ""),
+                                quantity=int(product.get("quantity", 1) or 1),
+                            )
+                            for product in order.get("products", [])
+                            if product.get("sku")
+                        ],
+                    )
                 )
-            )
+            except Exception as exc:
+                logger.warning("Failed to process Baselinker order %s data: %s", order_id, exc)
+                items.append(
+                    SyncOrder(
+                        integration="baselinker",
+                        external_id=str(order_id),
+                        created_timestamp=int(order.get("date_add", 0)),
+                        source=order_sources.get(order.get("order_source_id")) or order.get("order_source"),
+                        fullname=clean_text(order.get("invoice_fullname")),
+                        company=clean_text(order.get("invoice_company")),
+                        expected_shipment_date=None,
+                        items=[],
+                        sync_warning=f"Błąd przetwarzania danych zamówienia: {exc}",
+                    )
+                )
         return items
 
-    return sync_normalized_orders(db, state, normalized_orders())
+    return sync_normalized_orders(db, state, normalized_orders(), sync_started_at, all_fetched=all_fetched)
 
 
 def find_shipment_date_field_id(client: BaselinkerClient) -> int | None:

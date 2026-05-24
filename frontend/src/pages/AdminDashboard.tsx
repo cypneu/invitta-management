@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AdminTopBar from '../AdminTopBar';
-import { getOrders, getSyncStatus, triggerSync } from '../api';
+import { getOrders, getSyncStatus } from '../api';
 import type { OrderListItem, SyncStatus } from '../types';
 import { ORDER_STATUS_LABELS } from '../types';
 
@@ -12,8 +12,6 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
 
   useEffect(() => {
     loadData();
@@ -32,23 +30,6 @@ export default function AdminDashboard() {
       console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSync = async () => {
-    if (!user) return;
-    setSyncing(true);
-    setSyncMessage('');
-    try {
-      const result = await triggerSync(user.id);
-      setSyncMessage(result.message);
-      if (result.success) {
-        await loadData();
-      }
-    } catch (err) {
-      setSyncMessage('Synchronizacja nie powiodła się');
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -100,20 +81,18 @@ export default function AdminDashboard() {
               </div>
 
               <div className="card stat-card">
-                <h3>Ostatnia synchronizacja</h3>
-                <div className="stat-value">
-                  {syncStatus?.last_sync_at
-                    ? new Date(syncStatus.last_sync_at).toLocaleString('pl-PL')
-                    : 'Nigdy'}
-                </div>
-                <button
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className="btn-primary btn-sm stat-button"
-                >
-                  {syncing ? 'Synchronizacja...' : 'Synchronizuj teraz'}
-                </button>
-                {syncMessage && <p className="sync-message">{syncMessage}</p>}
+                <h3>Synchronizacja danych</h3>
+                {syncStatus?.sources.filter(s => s.configured).map(source => (
+                  <div key={source.integration} className="stat-value" style={{ fontSize: '1.6rem', marginBottom: '0.5rem' }}>
+                    <strong>{source.label}:</strong>{' '}
+                    {source.last_sync_timestamp
+                      ? <>dane do {new Date(source.last_sync_timestamp * 1000).toLocaleString('pl-PL')}</>
+                      : 'Brak danych'}
+                  </div>
+                ))}
+                <p className="text-muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                  Synchronizacja odbywa się automatycznie co 4 minuty
+                </p>
               </div>
             </div>
 

@@ -3,7 +3,7 @@ import type {
     Product, ProductCreate, ProductUpdate,
     Order, OrderListItem, OrderCreate, OrderUpdate, OrderStatus,
     Action, ActionCreate, OrderPositionWithActions,
-    SyncStatus, SyncResult, OrderFilters, ActionType,
+    SyncStatus, OrderFilters, ActionType,
     PaginatedOrderFilters, PaginatedOrderListResponse,
     PaginatedProductFilters, PaginatedProductListResponse
 } from './types';
@@ -425,17 +425,6 @@ export async function getActionTypes(): Promise<string[]> {
 // Sync API
 export async function getSyncStatus(): Promise<SyncStatus> {
     const response = await fetch(`${API_BASE}/api/sync/status`);
-    return response.json();
-}
-
-export async function triggerSync(userId: number): Promise<SyncResult> {
-    const response = await fetch(`${API_BASE}/api/sync/trigger?user_id=${userId}`, {
-        method: 'POST',
-    });
-    if (!response.ok) {
-        throw new Error(await getApiErrorDetail(response, 'Nie udało się uruchomić synchronizacji'));
-    }
-
     return response.json();
 }
 

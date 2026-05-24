@@ -569,6 +569,9 @@ export default function AdminOrders() {
                                                             </td>
                                                             <td className="order-client-cell">
                                                                 <span className="order-primary-text">{order.fullname || order.company || '-'}</span>
+                                                                {order.sync_warning && (
+                                                                    <span className="sync-warning-badge" title={order.sync_warning}>⚠️ Błąd synchronizacji</span>
+                                                                )}
                                                             </td>
                                                             <td className="hide-mobile order-source-cell">
                                                                 <span className="order-secondary-text">{order.source || '-'}</span>
@@ -865,6 +868,15 @@ export default function AdminOrders() {
                                 </p>
                                 {selectedOrder.external_id && (
                                     <p><strong>ID zewnętrzne:</strong> {selectedOrder.external_id}</p>
+                                )}
+                                {selectedOrder.sync_warning && (
+                                    <div className="sync-warning-banner">
+                                        <span className="sync-warning-icon">⚠️</span>
+                                        <div>
+                                            <strong>Błąd synchronizacji</strong>
+                                            <p>{selectedOrder.sync_warning}</p>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         )}

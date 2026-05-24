@@ -82,29 +82,15 @@ export default function AdminSync() {
                     ) : (
                         <>
                             <div className="sync-status-grid">
-                                <div className="sync-stat">
-                                    <label>Ostatnia synchronizacja ogółem:</label>
-                                    <span>
-                                        {syncStatus?.last_sync_at
-                                            ? new Date(syncStatus.last_sync_at).toLocaleString('pl-PL')
-                                            : 'Nigdy'}
-                                    </span>
-                                </div>
-                                <div className="sync-stat">
-                                    <label>Ostatni timestamp:</label>
-                                    <span>{syncStatus?.last_sync_timestamp || 0}</span>
-                                </div>
-                            </div>
-
-                            <div className="sync-status-grid">
                                 {(syncStatus?.sources || []).map(source => (
                                     <div key={source.integration} className="sync-stat">
                                         <label>{source.label}</label>
                                         <span>{source.configured ? 'Aktywny' : 'Brak tokenu'}</span>
                                         <span>
-                                            {source.last_sync_at
-                                                ? new Date(source.last_sync_at).toLocaleString('pl-PL')
-                                                : 'Nigdy'}
+                                            Dane zsynchronizowane do:{' '}
+                                            {source.last_sync_timestamp
+                                                ? new Date(source.last_sync_timestamp * 1000).toLocaleString('pl-PL')
+                                                : 'Brak danych'}
                                         </span>
                                         {source.shipment_date_field_id && (
                                             <span>Pole daty wysyłki: {source.shipment_date_field_id}</span>
@@ -119,7 +105,7 @@ export default function AdminSync() {
                 <div className="card">
                     <h2>Ręczna synchronizacja</h2>
                     <p className="text-muted">
-                        Synchronizacja automatyczna uruchamia się co 5 minut dla wszystkich skonfigurowanych źródeł.
+                        Synchronizacja automatyczna uruchamia się co 4 minuty dla wszystkich skonfigurowanych źródeł.
                     </p>
 
                     <button

@@ -1,11 +1,16 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import logging
 import re
 from typing import Iterable
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session
 
 from ..models import EdgeType, Order, OrderPosition, OrderStatus, Product, ShapeType, SyncState
+
+MAX_ORDERS_PER_SYNC = 200
 
 
 @dataclass(slots=True)
@@ -24,6 +29,7 @@ class SyncOrder:
     company: str | None
     expected_shipment_date: date | None
     items: list[SyncItem]
+    sync_warning: str | None = None
 
 
 def initial_sync_timestamp() -> int:
@@ -39,19 +45,39 @@ def get_sync_state(db: Session, integration: str) -> SyncState:
     return state
 
 
-def sync_normalized_orders(db: Session, state: SyncState, orders: Iterable[SyncOrder]) -> dict[str, int | str]:
+def sync_normalized_orders(
+    db: Session,
+    state: SyncState,
+    orders: list[SyncOrder],
+    sync_started_at: int,
+    all_fetched: bool = True,
+) -> dict[str, int | str]:
     orders_synced = 0
     products_created = 0
-    max_timestamp = state.last_sync_timestamp
 
     for payload in orders:
-        max_timestamp = max(max_timestamp, payload.created_timestamp)
         created, product_count = upsert_order(db, payload)
         orders_synced += int(created)
         products_created += product_count
 
-    if max_timestamp > state.last_sync_timestamp:
-        state.last_sync_timestamp = max_timestamp
+    if all_fetched:
+        # Normal case: use server time with safety buffer.
+        # This ensures orders created during sync are never skipped.
+        new_timestamp = sync_started_at - 120  # 2 minute safety buffer
+    else:
+        # Capped case (catching up): advance to the latest order's timestamp
+        # so the next cycle continues from where we left off.
+        if orders:
+            new_timestamp = max(o.created_timestamp for o in orders)
+        else:
+            new_timestamp = state.last_sync_timestamp
+        logger.info(
+            "Batch cap reached for %s (%d orders), will continue from timestamp %d next cycle",
+            state.integration, len(orders), new_timestamp,
+        )
+
+    if new_timestamp > state.last_sync_timestamp:
+        state.last_sync_timestamp = new_timestamp
 
     db.commit()
 
@@ -84,6 +110,7 @@ def upsert_order(db: Session, payload: SyncOrder) -> tuple[bool, int]:
             fullname=payload.fullname,
             company=payload.company,
             status=OrderStatus.in_progress,
+            sync_warning=payload.sync_warning,
         )
         db.add(order)
     else:
@@ -96,6 +123,7 @@ def upsert_order(db: Session, payload: SyncOrder) -> tuple[bool, int]:
         order.company = payload.company
         if payload.expected_shipment_date is not None:
             order.expected_shipment_date = payload.expected_shipment_date
+        order.sync_warning = payload.sync_warning
 
     db.flush()
 

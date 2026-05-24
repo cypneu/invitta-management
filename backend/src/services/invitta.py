@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..order_sources import normalize_order_source
-from .order_sync import SyncItem, SyncOrder, get_sync_state, sync_normalized_orders
+from .order_sync import MAX_ORDERS_PER_SYNC, SyncItem, SyncOrder, get_sync_state, sync_normalized_orders
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class InvittaClient:
             raise RuntimeError(payload.get("message", "Błąd API Invitta"))
         return payload.get("data") or {}
 
-    def get_orders(self, date_from: str) -> list[dict[str, Any]]:
+    def get_orders(self, date_from: str, max_orders: int | None = None) -> list[dict[str, Any]]:
         orders: list[dict[str, Any]] = []
         page = 1
 
@@ -51,6 +51,8 @@ class InvittaClient:
             )
             batch = data.get("orders", [])
             orders.extend(batch)
+            if max_orders and len(orders) >= max_orders:
+                return orders
             pagination = data.get("pagination") or {}
             if not batch or page >= int(pagination.get("total_pages") or page):
                 return orders
@@ -63,41 +65,64 @@ class InvittaClient:
         return self._get(f"/api/v1/orders/{order_id}/items").get("items", [])
 
 
-def sync_invitta_orders(db: Session) -> dict[str, int | str]:
+def sync_invitta_orders(db: Session, sync_started_at: int) -> dict[str, int | str]:
     if not settings.invitta_api_token:
         return {"integration": "invitta", "orders_synced": 0, "products_created": 0}
 
     client = InvittaClient(settings.invitta_api_token)
     state = get_sync_state(db, "invitta")
-    date_from = datetime.fromtimestamp(max(state.last_sync_timestamp - 86400, 0)).date().isoformat()
+    # Use 2-day buffer to avoid timezone edge cases (server may be in UTC, orders in CET)
+    date_from = datetime.fromtimestamp(max(state.last_sync_timestamp - 2 * 86400, 0)).date().isoformat()
+
+    raw_orders = client.get_orders(date_from, max_orders=MAX_ORDERS_PER_SYNC)
+    all_fetched = len(raw_orders) < MAX_ORDERS_PER_SYNC
 
     def normalized_orders() -> list[SyncOrder]:
         items: list[SyncOrder] = []
-        for order in client.get_orders(date_from):
+        for order in raw_orders:
             order_id = int(order["id"])
+            # API calls — let network/API errors propagate (all-or-nothing)
             details = order if order.get("payer") or order.get("delivery") else client.get_order(order_id)
-            items.append(
-                SyncOrder(
-                    integration="invitta",
-                    external_id=str(order_id),
-                    created_timestamp=parse_timestamp(order.get("created_at")),
-                    source=normalize_order_source(clean_text(order.get("source")), "invitta"),
-                    fullname=extract_fullname(details),
-                    company=extract_company(details),
-                    expected_shipment_date=None,
-                    items=[
-                        SyncItem(
-                            sku=sku,
-                            quantity=int(float(item.get("quantity", 1) or 1)),
-                        )
-                        for item in client.get_order_items(order_id)
-                        if (sku := resolve_item_sku(item))
-                    ],
+            order_items = client.get_order_items(order_id)
+            try:
+                # Data processing — catch parsing/validation errors per order
+                items.append(
+                    SyncOrder(
+                        integration="invitta",
+                        external_id=str(order_id),
+                        created_timestamp=parse_timestamp(order.get("created_at")),
+                        source=normalize_order_source(clean_text(order.get("source")), "invitta"),
+                        fullname=extract_fullname(details),
+                        company=extract_company(details),
+                        expected_shipment_date=None,
+                        items=[
+                            SyncItem(
+                                sku=sku,
+                                quantity=int(float(item.get("quantity", 1) or 1)),
+                            )
+                            for item in order_items
+                            if (sku := resolve_item_sku(item))
+                        ],
+                    )
                 )
-            )
+            except Exception as exc:
+                logger.warning("Failed to process Invitta order %s data: %s", order_id, exc)
+                items.append(
+                    SyncOrder(
+                        integration="invitta",
+                        external_id=str(order_id),
+                        created_timestamp=parse_timestamp(order.get("created_at")),
+                        source=normalize_order_source(clean_text(order.get("source")), "invitta"),
+                        fullname=extract_fullname(order),
+                        company=extract_company(order),
+                        expected_shipment_date=None,
+                        items=[],
+                        sync_warning=f"Błąd przetwarzania danych zamówienia: {exc}",
+                    )
+                )
         return items
 
-    return sync_normalized_orders(db, state, normalized_orders())
+    return sync_normalized_orders(db, state, normalized_orders(), sync_started_at, all_fetched=all_fetched)
 
 
 def extract_fullname(order: dict[str, Any]) -> str | None:

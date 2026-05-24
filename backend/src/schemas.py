@@ -167,6 +167,7 @@ class OrderResponse(BaseModel):
     fullname: str | None
     company: str | None
     status: OrderStatus
+    sync_warning: str | None = None
     positions: list[OrderPositionResponse] = []
 
     @field_validator("status", mode="before")
@@ -193,6 +194,7 @@ class OrderListResponse(BaseModel):
     fullname: str | None
     company: str | None
     status: OrderStatus
+    sync_warning: str | None = None
     position_count: int = 0
 
     @field_validator("status", mode="before")
@@ -231,6 +233,7 @@ class OrderWithPositionsListResponse(BaseModel):
     fullname: str | None
     company: str | None
     status: OrderStatus
+    sync_warning: str | None = None
     position_count: int = 0
     positions: list[OrderPositionBrief] = []
 

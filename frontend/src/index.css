@@ -4368,3 +4368,41 @@ code {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Sync warning styles */
+.sync-warning-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: #f59e0b;
+    margin-left: 0.4rem;
+    cursor: help;
+    white-space: nowrap;
+}
+
+.sync-warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin-top: 0.75rem;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 0.5rem;
+    color: #92400e;
+    font-size: 0.85rem;
+}
+
+.sync-warning-banner strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.sync-warning-banner p {
+    margin: 0;
+    word-break: break-word;
+}
+
+.sync-warning-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}

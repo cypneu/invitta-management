@@ -95,6 +95,7 @@ export interface Order {
     fullname: string | null;
     company: string | null;
     status: OrderStatus;
+    sync_warning: string | null;
     positions: OrderPosition[];
 }
 
@@ -115,6 +116,7 @@ export interface OrderListItem {
     fullname: string | null;
     company: string | null;
     status: OrderStatus;
+    sync_warning: string | null;
     position_count: number;
     positions: OrderPositionBrief[];
 }

@@ -3,6 +3,7 @@ from enum import Enum as PyEnum
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     Date,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -116,6 +118,7 @@ class Order(Base):
     status = Column(
         Enum(OrderStatus), nullable=False, default=OrderStatus.in_progress, index=True
     )
+    sync_warning = Column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -210,6 +213,8 @@ class SyncState(Base):
     integration = Column(String(50), unique=True, nullable=False)
     last_sync_timestamp = Column(BigInteger, nullable=False, default=0)
     shipment_date_field_id = Column(Integer, nullable=True)
+    sync_in_progress = Column(Boolean, nullable=False, default=False, server_default="0")
+    sync_started_at = Column(DateTime, nullable=True)
     updated_at = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )

@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
             minutes=settings.sync_interval_minutes,
             id="order_sync",
             replace_existing=True,
+            max_instances=1,
         )
         scheduler.start()
         logger.info(
