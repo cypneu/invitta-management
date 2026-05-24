@@ -6,14 +6,29 @@ import { getOrdersPaginated, getOrderSources, getOrder, createOrder, deleteOrder
 import type { OrderListItem, Order, Product, OrderPositionWithActions, ActionType, OrderStatus, Action, OrderStatusCounts } from '../types';
 import { ACTION_TYPE_LABELS, ORDER_STATUS_LABELS, SYNC_LABELS } from '../types';
 
-// Helper to format date as DD-MM-YYYY
+// Helper to format date as DD.MM.YYYY
 function formatDate(dateStr: string | null): string {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
+    return `${day}.${month}.${year}`;
+}
+
+// Convert ISO (YYYY-MM-DD) to European (DD.MM.YYYY)
+function isoToEuro(iso: string): string {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}.${m}.${y}`;
+}
+
+// Convert European (DD.MM.YYYY) to ISO (YYYY-MM-DD), returns '' if invalid
+function euroToIso(euro: string): string {
+    const match = euro.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (!match) return '';
+    const [, d, m, y] = match;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
 }
 
 function formatTime(timestamp: string): string {
@@ -57,7 +72,7 @@ export default function AdminOrders() {
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [positions, setPositions] = useState<OrderPositionWithActions[]>([]);
     const [positionActions, setPositionActions] = useState<Record<number, Action[]>>({});
-    const [products, setProducts] = useState<Product[]>([]);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -83,12 +98,19 @@ export default function AdminOrders() {
 
     // New order form
     const [showCreateForm, setShowCreateForm] = useState(false);
-    const [newOrder, setNewOrder] = useState({ fullname: '', company: '', expected_shipment_date: '' });
+    const [newOrder, setNewOrder] = useState({ name: '', expected_shipment_date: '' });
+    const [pendingPositions, setPendingPositions] = useState<Array<{ product: Product, quantityStr: string }>>([]);
 
-    // Add position form
+    // Product search (shared between create-order and add-position modals)
+    const [productSearch, setProductSearch] = useState('');
+    const [searchResults, setSearchResults] = useState<Product[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [showSearchResults, setShowSearchResults] = useState(false);
+
+    // Add position form (in order details view)
     const [showAddPosition, setShowAddPosition] = useState(false);
-    const [selectedProductId, setSelectedProductId] = useState<number | ''>('');
-    const [positionQuantity, setPositionQuantity] = useState(1);
+    const [addPosProduct, setAddPosProduct] = useState<Product | null>(null);
+    const [addPosQtyStr, setAddPosQtyStr] = useState('1');
 
     // Edit shipment date (details only)
     const [editingShipmentDate, setEditingShipmentDate] = useState(false);
@@ -103,7 +125,6 @@ export default function AdminOrders() {
     const [editingDateValue, setEditingDateValue] = useState('');
 
     useEffect(() => {
-        loadProducts();
         loadSources();
     }, []);
 
@@ -123,6 +144,26 @@ export default function AdminOrders() {
             setPositionActions({});
         }
     }, [orderId]);
+
+    // Product search debounce
+    useEffect(() => {
+        if (!productSearch.trim()) {
+            setSearchResults([]);
+            return;
+        }
+        setSearchLoading(true);
+        const timer = setTimeout(async () => {
+            try {
+                const results = await getProducts(productSearch.trim());
+                setSearchResults(results);
+            } catch {
+                setSearchResults([]);
+            } finally {
+                setSearchLoading(false);
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [productSearch]);
 
     const loadOrders = async (page = currentPage) => {
         setLoading(true);
@@ -158,15 +199,6 @@ export default function AdminOrders() {
         }
     };
 
-    const loadProducts = async () => {
-        try {
-            const data = await getProducts();
-            setProducts(data);
-        } catch {
-            console.error('Failed to load products');
-        }
-    };
-
     const loadOrderDetails = async (id: number) => {
         try {
             const [orderData, positionsData] = await Promise.all([
@@ -188,17 +220,27 @@ export default function AdminOrders() {
         }
     };
 
+    const resetProductSearch = () => {
+        setProductSearch('');
+        setSearchResults([]);
+        setShowSearchResults(false);
+    };
+
     const handleCreateOrder = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        const parsedPositions = pendingPositions.map(p => ({ product_id: p.product.id, quantity: parseInt(p.quantityStr) || 0 }));
+        if (!user || parsedPositions.length === 0 || parsedPositions.some(p => p.quantity <= 0)) return;
         try {
+            const isoDate = euroToIso(newOrder.expected_shipment_date);
             await createOrder(user.id, {
-                fullname: newOrder.fullname || undefined,
-                company: newOrder.company || undefined,
-                expected_shipment_date: newOrder.expected_shipment_date || undefined,
+                fullname: newOrder.name || undefined,
+                expected_shipment_date: isoDate || undefined,
+                positions: parsedPositions,
             });
             setShowCreateForm(false);
-            setNewOrder({ fullname: '', company: '', expected_shipment_date: '' });
+            setNewOrder({ name: '', expected_shipment_date: '' });
+            setPendingPositions([]);
+            resetProductSearch();
             await loadOrders(currentPage);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Nie udało się utworzyć zamówienia');
@@ -325,14 +367,18 @@ export default function AdminOrders() {
         }
     };
 
-    const handleAddPosition = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!user || !selectedOrder || !selectedProductId) return;
+    const handleAddPosition = async () => {
+        if (!user || !selectedOrder || !addPosProduct) return;
+        const qty = parseInt(addPosQtyStr) || 0;
+        if (qty <= 0) {
+            setError('Ilość musi być większa od 0');
+            return;
+        }
         try {
-            await addPosition(user.id, selectedOrder.id, Number(selectedProductId), positionQuantity);
-            setShowAddPosition(false);
-            setSelectedProductId('');
-            setPositionQuantity(1);
+            await addPosition(user.id, selectedOrder.id, addPosProduct.id, qty);
+            resetProductSearch();
+            setAddPosProduct(null);
+            setAddPosQtyStr('1');
             await loadOrderDetails(selectedOrder.id);
             await loadOrders();
         } catch (err) {
@@ -640,39 +686,115 @@ export default function AdminOrders() {
 
                         {/* Create order modal */}
                         {showCreateForm && (
-                            <div className="modal-overlay">
-                                <div className="modal">
+                            <div className="modal-overlay" onClick={() => { setShowCreateForm(false); resetProductSearch(); setPendingPositions([]); }}>
+                                <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
                                     <h3>Nowe zamówienie</h3>
                                     <form onSubmit={handleCreateOrder}>
                                         <div className="form-group">
-                                            <label>Imię i nazwisko</label>
+                                            <label>Nazwa zamówienia (Osoba lub firma)</label>
                                             <input
                                                 type="text"
-                                                value={newOrder.fullname}
-                                                onChange={e => setNewOrder({ ...newOrder, fullname: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label>Firma</label>
-                                            <input
-                                                type="text"
-                                                value={newOrder.company}
-                                                onChange={e => setNewOrder({ ...newOrder, company: e.target.value })}
+                                                value={newOrder.name}
+                                                onChange={e => setNewOrder({ ...newOrder, name: e.target.value })}
+                                                placeholder="np. Jan Kowalski lub Firma XYZ"
                                             />
                                         </div>
                                         <div className="form-group">
                                             <label>Planowana wysyłka</label>
-                                            <input
-                                                type="date"
-                                                value={newOrder.expected_shipment_date}
-                                                onChange={e => setNewOrder({ ...newOrder, expected_shipment_date: e.target.value })}
-                                            />
+                                            <div className="euro-date-input">
+                                                <input
+                                                    type="text"
+                                                    placeholder="DD.MM.RRRR"
+                                                    value={newOrder.expected_shipment_date}
+                                                    onChange={e => setNewOrder({ ...newOrder, expected_shipment_date: e.target.value })}
+                                                />
+                                                <input
+                                                    type="date"
+                                                    className="euro-date-hidden"
+                                                    onChange={e => setNewOrder({ ...newOrder, expected_shipment_date: isoToEuro(e.target.value) })}
+                                                />
+                                            </div>
                                         </div>
+
+                                        <div className="positions-section">
+                                            <div className="positions-section-header">
+                                                <h4>Pozycje</h4>
+                                                <span className="positions-section-count">{pendingPositions.length} dodanych</span>
+                                            </div>
+
+                                            {pendingPositions.length > 0 && (
+                                                <div className="pending-positions">
+                                                    {pendingPositions.map((pp, idx) => (
+                                                        <div key={pp.product.id} className="pending-position-row">
+                                                            <span className="pending-position-sku">{pp.product.sku}</span>
+                                                            <span className="pending-position-qty">
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={pp.quantityStr}
+                                                                    onChange={e => {
+                                                                        setPendingPositions(prev => prev.map((p, i) => i === idx ? { ...p, quantityStr: e.target.value } : p));
+                                                                    }}
+                                                                />
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                className="pending-position-remove"
+                                                                onClick={() => setPendingPositions(prev => prev.filter((_, i) => i !== idx))}
+                                                                title="Usuń pozycję"
+                                                            >×</button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="form-group product-search-container">
+                                                <label>Szukaj produktu</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Wpisz SKU, tkaninę lub wzór..."
+                                                    value={productSearch}
+                                                    onChange={e => { setProductSearch(e.target.value); setShowSearchResults(true); }}
+                                                    onFocus={() => setShowSearchResults(true)}
+                                                />
+                                                {showSearchResults && productSearch.trim() && (
+                                                    <div className="product-search-results">
+                                                        {searchLoading ? (
+                                                            <div className="product-search-empty">Szukanie...</div>
+                                                        ) : (() => {
+                                                            const pendingIds = new Set(pendingPositions.map(p => p.product.id));
+                                                            const filtered = searchResults.filter(p => !pendingIds.has(p.id));
+                                                            return filtered.length === 0 ? (
+                                                                <div className="product-search-empty">Brak wyników</div>
+                                                            ) : (
+                                                                filtered.slice(0, 6).map(product => (
+                                                                    <div
+                                                                        key={product.id}
+                                                                        className="product-search-item"
+                                                                        onClick={() => {
+                                                                            setPendingPositions(prev => [...prev, { product, quantityStr: '1' }]);
+                                                                            setProductSearch('');
+                                                                            setShowSearchResults(false);
+                                                                        }}
+                                                                    >
+                                                                        <span className="product-search-item-sku">{product.sku}</span>
+                                                                        <span className="product-search-item-details">{product.fabric} / {product.pattern}</span>
+                                                                    </div>
+                                                                ))
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
                                         <div className="modal-actions">
-                                            <button type="button" className="btn-secondary" onClick={() => setShowCreateForm(false)}>
+                                            <button type="button" className="btn-secondary" onClick={() => { setShowCreateForm(false); resetProductSearch(); setPendingPositions([]); }}>
                                                 Anuluj
                                             </button>
-                                            <button type="submit" className="btn-primary">Utwórz</button>
+                                            <button type="submit" className="btn-primary" disabled={pendingPositions.length === 0 || pendingPositions.some(p => { const q = parseInt(p.quantityStr); return !q || q <= 0; })}>
+                                                Utwórz zamówienie
+                                            </button>
                                         </div>
                                     </form>
                                 </div>
@@ -860,42 +982,84 @@ export default function AdminOrders() {
 
                 {/* Add position modal */}
                 {showAddPosition && (
-                    <div className="modal-overlay">
-                        <div className="modal">
+                    <div className="modal-overlay" onClick={() => { setShowAddPosition(false); resetProductSearch(); setAddPosProduct(null); setAddPosQtyStr('1'); }}>
+                        <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
                             <h3>Dodaj pozycję</h3>
-                            <form onSubmit={handleAddPosition}>
-                                <div className="form-group">
-                                    <label>Produkt</label>
-                                    <select
-                                        value={selectedProductId}
-                                        onChange={e => setSelectedProductId(Number(e.target.value) || '')}
-                                        required
-                                    >
-                                        <option value="">Wybierz produkt...</option>
-                                        {products.map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.sku} ({p.fabric} / {p.pattern})
-                                            </option>
-                                        ))}
-                                    </select>
+
+                            {addPosProduct ? (
+                                <div>
+                                    <div className="pending-position-row" style={{ marginBottom: '1rem' }}>
+                                        <span className="pending-position-sku">{addPosProduct.sku}</span>
+                                        <span className="product-search-item-details">{addPosProduct.fabric} / {addPosProduct.pattern}</span>
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Ilość</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={addPosQtyStr}
+                                            onChange={e => setAddPosQtyStr(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div className="modal-actions">
+                                        <button type="button" className="btn-secondary" onClick={() => { setAddPosProduct(null); setAddPosQtyStr('1'); }}>
+                                            Zmień produkt
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn-primary"
+                                            disabled={!addPosQtyStr || (parseInt(addPosQtyStr) || 0) <= 0}
+                                            onClick={handleAddPosition}
+                                        >
+                                            Dodaj pozycję
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="form-group">
-                                    <label>Ilość</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={positionQuantity}
-                                        onChange={e => setPositionQuantity(parseInt(e.target.value) || 1)}
-                                        required
-                                    />
+                            ) : (
+                                <div>
+                                    <div className="form-group product-search-container">
+                                        <label>Szukaj produktu</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Wpisz SKU, tkaninę lub wzór..."
+                                            value={productSearch}
+                                            onChange={e => { setProductSearch(e.target.value); setShowSearchResults(true); }}
+                                            onFocus={() => setShowSearchResults(true)}
+                                            autoFocus
+                                        />
+                                        {showSearchResults && productSearch.trim() && (
+                                            <div className="product-search-results">
+                                                {searchLoading ? (
+                                                    <div className="product-search-empty">Szukanie...</div>
+                                                ) : (() => {
+                                                    const existingIds = new Set(positions.map(p => p.product_id));
+                                                    const filtered = searchResults.filter(p => !existingIds.has(p.id));
+                                                    return filtered.length === 0 ? (
+                                                        <div className="product-search-empty">Brak wyników</div>
+                                                    ) : (
+                                                        filtered.slice(0, 6).map(product => (
+                                                            <div
+                                                                key={product.id}
+                                                                className="product-search-item"
+                                                                onClick={() => { setAddPosProduct(product); resetProductSearch(); }}
+                                                            >
+                                                                <span className="product-search-item-sku">{product.sku}</span>
+                                                                <span className="product-search-item-details">{product.fabric} / {product.pattern}</span>
+                                                            </div>
+                                                        ))
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="modal-actions">
+                                        <button type="button" className="btn-secondary" onClick={() => { setShowAddPosition(false); resetProductSearch(); }}>
+                                            Zamknij
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="modal-actions">
-                                    <button type="button" className="btn-secondary" onClick={() => setShowAddPosition(false)}>
-                                        Anuluj
-                                    </button>
-                                    <button type="submit" className="btn-primary">Dodaj</button>
-                                </div>
-                            </form>
+                            )}
                         </div>
                     </div>
                 )}

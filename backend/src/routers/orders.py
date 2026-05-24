@@ -625,7 +625,7 @@ def delete_position(
 
     position = (
         db.query(OrderPosition)
-        .options(joinedload(OrderPosition.order))
+        .options(joinedload(OrderPosition.order).joinedload(Order.positions))
         .filter(OrderPosition.id == position_id)
         .first()
     )
@@ -633,7 +633,14 @@ def delete_position(
         raise HTTPException(status_code=404, detail="Nie znaleziono pozycji")
 
     order = position.order
-    
+
+    # Prevent deleting the last position
+    if len(order.positions) <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Nie można usunąć ostatniej pozycji zamówienia. Zamówienie musi mieć co najmniej jedną pozycję."
+        )
+
     db.delete(position)
     db.flush()
     

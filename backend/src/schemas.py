@@ -149,7 +149,7 @@ class OrderCreate(BaseModel):
     expected_shipment_date: date | None = None
     fullname: str | None = Field(None, max_length=200)
     company: str | None = Field(None, max_length=200)
-    positions: list[OrderPositionCreate] = []
+    positions: list[OrderPositionCreate] = Field(default=[], min_length=1)
 
 
 class OrderUpdate(BaseModel):
