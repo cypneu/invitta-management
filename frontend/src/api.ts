@@ -130,6 +130,18 @@ export async function createProduct(userId: number, data: ProductCreate): Promis
     return response.json();
 }
 
+export async function createProductFromSku(userId: number, sku: string): Promise<Product> {
+    const response = await fetch(`${API_BASE}/api/products/from-sku?user_id=${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku }),
+    });
+    if (!response.ok) {
+        throw new Error(await getApiErrorDetail(response, 'Nie udało się utworzyć produktu'));
+    }
+    return response.json();
+}
+
 export async function updateProduct(userId: number, productId: number, data: ProductUpdate): Promise<Product> {
     const response = await fetch(`${API_BASE}/api/products/${productId}?user_id=${userId}`, {
         method: 'PUT',

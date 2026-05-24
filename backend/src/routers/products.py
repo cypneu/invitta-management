@@ -7,11 +7,40 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Product, ShapeType, User
-from ..schemas import ProductResponse, ProductCreate, ProductUpdate, PaginatedProductListResponse
+from ..models import EdgeType, Product, ShapeType, User
+from ..schemas import ProductResponse, ProductCreate, ProductCreateFromSku, ProductUpdate, PaginatedProductListResponse
+from ..services.order_sync import parse_sku
 from .users import get_current_user
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+
+def build_sku(
+    edge_type: str | None,
+    fabric: str,
+    pattern: str,
+    shape: str,
+    width: int | None,
+    height: int | None,
+    diameter: int | None,
+) -> str:
+    """Build a standardised SKU string from product component fields."""
+    parts: list[str] = []
+    if edge_type:
+        parts.append(edge_type)
+    if fabric:
+        parts.append(fabric)
+    if pattern:
+        parts.append(pattern)
+
+    if shape == "round" and diameter:
+        parts.append(f"o{diameter}")
+    elif shape == "oval" and width and height:
+        parts.append(f"{width}v{height}")
+    elif width and height:
+        parts.append(f"{width}x{height}")
+
+    return "-".join(parts)
 
 
 def apply_product_filters(
@@ -171,6 +200,29 @@ def create_product(
     return product
 
 
+@router.post("/from-sku", response_model=ProductResponse)
+def create_product_from_sku(
+    data: ProductCreateFromSku,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new product by parsing a SKU string (admin only)."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Wymagane uprawnienia administratora")
+
+    sku = data.sku.strip()
+    existing = db.query(Product).filter(Product.sku == sku).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Produkt z tym SKU już istnieje")
+
+    parsed = parse_sku(sku)
+    product = Product(sku=sku, **parsed)
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
 @router.put("/{product_id}", response_model=ProductResponse)
 def update_product(
     product_id: int,
@@ -186,16 +238,29 @@ def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
 
-    # Check if SKU already taken by another product
-    if product_data.sku and product_data.sku != product.sku:
-        existing = db.query(Product).filter(Product.sku == product_data.sku).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="Produkt z tym SKU już istnieje")
-
-    # Update fields that are provided
+    # Update fields that are provided (except sku — rebuilt automatically)
     update_data = product_data.model_dump(exclude_unset=True)
+    update_data.pop("sku", None)
     for field, value in update_data.items():
         setattr(product, field, value)
+
+    # Auto-rebuild SKU from component fields
+    edge_type_val = product.edge_type.value if product.edge_type else None
+    new_sku = build_sku(
+        edge_type=edge_type_val,
+        fabric=product.fabric,
+        pattern=product.pattern,
+        shape=product.shape.value if product.shape else "rectangular",
+        width=product.width,
+        height=product.height,
+        diameter=product.diameter,
+    )
+
+    if new_sku != product.sku:
+        existing = db.query(Product).filter(Product.sku == new_sku, Product.id != product_id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Produkt z tym SKU już istnieje")
+        product.sku = new_sku
 
     db.commit()
     db.refresh(product)

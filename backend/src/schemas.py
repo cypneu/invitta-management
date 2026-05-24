@@ -124,6 +124,10 @@ class ProductUpdate(BaseModel):
     edge_type: EdgeType | None = None
 
 
+class ProductCreateFromSku(BaseModel):
+    sku: str = Field(..., min_length=1, max_length=512)
+
+
 # Order schemas
 class OrderPositionCreate(BaseModel):
     product_id: int
