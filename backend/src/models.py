@@ -1,18 +1,18 @@
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
+    JSON,
+    BigInteger,
+    CheckConstraint,
     Column,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
     Integer,
     String,
-    DateTime,
-    Date,
-    ForeignKey,
-    CheckConstraint,
     UniqueConstraint,
-    JSON,
-    Enum,
-    BigInteger,
-    Float,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -42,6 +42,8 @@ class EdgeType(str, PyEnum):
     O5 = "O5"
     OGK = "OGK"
     LA = "LA"
+    S2 = "S2"
+    S4 = "S4"
 
 
 class OrderStatus(str, PyEnum):
@@ -66,7 +68,9 @@ class User(Base):
     )
 
     actions = relationship("OrderPositionAction", back_populates="actor")
-    action_assignments = relationship("OrderPositionActionWorker", back_populates="user")
+    action_assignments = relationship(
+        "OrderPositionActionWorker", back_populates="user"
+    )
 
     @property
     def name(self) -> str:
@@ -90,7 +94,9 @@ class Product(Base):
     __table_args__ = (
         CheckConstraint("width IS NULL OR width > 0", name="chk_positive_width"),
         CheckConstraint("height IS NULL OR height > 0", name="chk_positive_height"),
-        CheckConstraint("diameter IS NULL OR diameter > 0", name="chk_positive_diameter"),
+        CheckConstraint(
+            "diameter IS NULL OR diameter > 0", name="chk_positive_diameter"
+        ),
     )
 
     order_positions = relationship("OrderPosition", back_populates="product")
@@ -107,20 +113,28 @@ class Order(Base):
     expected_shipment_date = Column(Date, nullable=True, index=True)
     fullname = Column(String(200), nullable=True)
     company = Column(String(200), nullable=True)
-    status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.in_progress, index=True)
-
-    __table_args__ = (
-        UniqueConstraint("integration", "external_id", name="uq_orders_integration_external_id"),
+    status = Column(
+        Enum(OrderStatus), nullable=False, default=OrderStatus.in_progress, index=True
     )
 
-    positions = relationship("OrderPosition", back_populates="order", cascade="all, delete-orphan")
+    __table_args__ = (
+        UniqueConstraint(
+            "integration", "external_id", name="uq_orders_integration_external_id"
+        ),
+    )
+
+    positions = relationship(
+        "OrderPosition", back_populates="order", cascade="all, delete-orphan"
+    )
 
 
 class OrderPosition(Base):
     __tablename__ = "order_positions"
 
     id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    order_id = Column(
+        Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
     quantity = Column(Integer, nullable=False)
 
@@ -131,7 +145,11 @@ class OrderPosition(Base):
 
     order = relationship("Order", back_populates="positions")
     product = relationship("Product", back_populates="order_positions")
-    actions = relationship("OrderPositionAction", back_populates="order_position", cascade="all, delete-orphan")
+    actions = relationship(
+        "OrderPositionAction",
+        back_populates="order_position",
+        cascade="all, delete-orphan",
+    )
 
 
 class OrderPositionAction(Base):
@@ -139,7 +157,10 @@ class OrderPositionAction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_position_id = Column(
-        Integer, ForeignKey("order_positions.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("order_positions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     action_type = Column(Enum(ActionType), nullable=False)
     quantity = Column(Integer, nullable=False)
@@ -189,7 +210,9 @@ class SyncState(Base):
     integration = Column(String(50), unique=True, nullable=False)
     last_sync_timestamp = Column(BigInteger, nullable=False, default=0)
     shipment_date_field_id = Column(Integer, nullable=True)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
 
 class CostConfig(Base):
@@ -210,4 +233,6 @@ class CostConfig(Base):
 
     material_waste = Column(JSON, nullable=False, default=dict)
 
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )

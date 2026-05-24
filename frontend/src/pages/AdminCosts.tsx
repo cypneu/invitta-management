@@ -16,7 +16,7 @@ import {
 } from '../api';
 import { ACTION_TYPE_LABELS, type ActionType, type User } from '../types';
 
-const EDGE_TYPES = ['U3', 'U4', 'U5', 'O1', 'O3', 'O5', 'OGK', 'LA'];
+const EDGE_TYPES = ['U3', 'U4', 'U5', 'O1', 'O3', 'O5', 'OGK', 'LA', 'S2', 'S4'];
 const ACTION_TYPES: ActionType[] = ['cutting', 'sewing', 'ironing', 'packing'];
 
 // Helper to get current week's Monday and Sunday

@@ -28,6 +28,8 @@ class EdgeType(str, Enum):
     O5 = "O5"
     OGK = "OGK"
     LA = "LA"
+    S2 = "S2"
+    S4 = "S4"
 
 
 class OrderStatus(str, Enum):

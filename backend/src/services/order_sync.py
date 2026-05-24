@@ -148,7 +148,7 @@ def parse_sku(sku: str) -> dict[str, object]:
     edge_type = None
     remaining = sku
 
-    for value in ["Druk-U3", "OGK", "U3", "U4", "U5", "O1", "O3", "O5", "LA"]:
+    for value in ["Druk-U3", "OGK", "U3", "U4", "U5", "O1", "O3", "O5", "LA", "S2", "S4"]:
         if not remaining.upper().startswith(value.upper()):
             continue
         boundary = len(value)
@@ -159,7 +159,7 @@ def parse_sku(sku: str) -> dict[str, object]:
         break
 
     if edge_type is None:
-        for value in ["Druk-U3", "OGK", "U3", "U4", "U5", "O1", "O3", "O5", "LA"]:
+        for value in ["Druk-U3", "OGK", "U3", "U4", "U5", "O1", "O3", "O5", "LA", "S2", "S4"]:
             suffixes = [f" {value.upper()}", f"-{value.upper()}"]
             normalized = remaining.upper()
             if not any(normalized.endswith(suffix) for suffix in suffixes):

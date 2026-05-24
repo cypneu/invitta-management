@@ -3,7 +3,7 @@
 export type ActionType = 'cutting' | 'sewing' | 'ironing' | 'packing';
 export type ShapeType = 'rectangular' | 'round' | 'oval';
 export type OrderStatus = 'in_progress' | 'done' | 'cancelled';
-export type EdgeType = 'U3' | 'U4' | 'U5' | 'O1' | 'O3' | 'O5' | 'OGK' | 'LA';
+export type EdgeType = 'U3' | 'U4' | 'U5' | 'O1' | 'O3' | 'O5' | 'OGK' | 'LA' | 'S2' | 'S4';
 export type SyncIntegration = 'baselinker' | 'invitta';
 
 export interface User {

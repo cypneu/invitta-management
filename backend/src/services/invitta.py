@@ -203,7 +203,7 @@ def parse_edge_type(value: str | None) -> str | None:
     if normalized in aliases:
         return aliases[normalized]
 
-    for token in ("OGK", "U3", "U4", "U5", "O1", "O3", "O5", "LA"):
+    for token in ("OGK", "U3", "U4", "U5", "O1", "O3", "O5", "LA", "S2", "S4"):
         if token in normalized:
             return token
 

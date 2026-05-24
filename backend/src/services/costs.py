@@ -1,6 +1,6 @@
 """Cost calculation service for production actions."""
 
-from ..models import ActionType, CostConfig, Product, EdgeType
+from ..models import ActionType, CostConfig, EdgeType, Product
 
 
 def get_material_waste(edge_type: str | None, config: CostConfig) -> int:
@@ -84,6 +84,8 @@ def get_or_create_config(db) -> CostConfig:
                 "O5": 0.6708,
                 "OGK": 1.254,
                 "LA": 0.1183,
+                "S2": 0.1183,
+                "S4": 0.1183,
             },
             sewing_factors={
                 "U3": 0.1593,
@@ -94,6 +96,8 @@ def get_or_create_config(db) -> CostConfig:
                 "O5": 1.489,
                 "OGK": 1.995,
                 "LA": 2.8,
+                "S2": 0.7847,
+                "S4": 0.7847,
             },
             material_waste={
                 "U3": 2,
@@ -104,6 +108,8 @@ def get_or_create_config(db) -> CostConfig:
                 "O5": 13,
                 "OGK": -16,
                 "LA": 1,
+                "S2": 4,
+                "S4": 4,
             },
         )
         db.add(config)
